@@ -1,0 +1,18 @@
+<svg width="640" height="220" viewBox="0 0 640 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="markGradient" x1="184" y1="16" x2="426" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5E9"/>
+      <stop offset="0.5" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#A21CAF"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="220" fill="white"/>
+  <g transform="translate(205 14)">
+    <rect x="0" y="0" width="52" height="52" rx="11" fill="url(#markGradient)"/>
+    <path d="M105 0H186C194.837 0 202 7.16344 202 16V98C202 106.837 194.837 114 186 114H159C150.163 114 143 106.837 143 98V68C143 62.4772 138.523 58 133 58H105C96.1634 58 89 50.8366 89 42V16C89 7.16344 96.1634 0 105 0Z" fill="url(#markGradient)"/>
+    <path d="M65 65H128C136.837 65 144 72.1634 144 81V111C144 119.837 136.837 127 128 127H81C75.4772 127 71 131.477 71 137V152C71 157.523 75.4772 162 81 162H111C119.837 162 127 169.163 127 178V190C127 198.837 119.837 206 111 206H16C7.16344 206 0 198.837 0 190V108C0 99.1634 7.16344 92 16 92H49C54.5228 92 59 87.5228 59 82V71C59 67.6863 61.6863 65 65 65Z" fill="url(#markGradient)"/>
+    <rect x="88" y="141" width="107" height="36" rx="10" fill="url(#markGradient)"/>
+    <rect x="164" y="189" width="54" height="54" rx="12" transform="translate(0 -37)" fill="url(#markGradient)"/>
+  </g>
+  <text x="320" y="198" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="0" fill="#111113">sistematize</text>
+</svg>

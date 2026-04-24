@@ -48,7 +48,7 @@ export function LoginView({ mode }: LoginViewProps) {
       <section className="w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl">
         <div className={`p-8 text-center ${isMaster ? 'bg-neutral-900' : 'bg-gradient-to-r from-purple-800 to-purple-600'}`}>
           <div className="mx-auto mb-4 flex h-16 w-56 items-center justify-center rounded-xl bg-white/95 px-4 shadow-lg">
-            <img src="/assets/pulsefit-logo-transparent.png" alt="PulseFit" className="h-12 w-full object-contain" />
+            <img src="/assets/sistematize-logo.svg" alt="Sistematize" className="h-12 w-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold uppercase tracking-tight text-white">
             {isMaster ? 'Backoffice Master' : 'Painel do Cliente'}
@@ -129,7 +129,8 @@ export function LoginView({ mode }: LoginViewProps) {
           </form>
 
           <div className="mt-6 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-neutral-400">
-            <Link to="/loja/pulsefit/catalogo" className="hover:text-purple-700">Loja demo</Link>
+            <Link to="/" className="hover:text-purple-700">Inicio</Link>
+            <Link to="/loja/pulsefit/catalogo" className="hover:text-purple-700">Catalogo demo</Link>
             <Link to={isMaster ? '/cliente/login' : '/master/login'} className="hover:text-purple-700">
               {isMaster ? 'Login cliente' : 'Login master'}
             </Link>

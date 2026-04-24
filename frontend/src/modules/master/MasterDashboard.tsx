@@ -11,7 +11,6 @@ import {
   Menu,
   Search,
   Settings,
-  ShieldCheck,
   ShoppingBag,
   Users,
   X
@@ -107,10 +106,8 @@ export function MasterDashboard() {
         <div className="border-b border-neutral-800 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-neutral-950">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <h1 className="mt-4 text-lg font-bold uppercase tracking-tight">Catalogos Master</h1>
+              <img src="/assets/sistematize-logo.svg" alt="Sistematize" className="h-12 w-44 rounded bg-white object-contain px-2" />
+              <h1 className="mt-4 text-lg font-bold uppercase tracking-tight">Sistematize Master</h1>
               <p className="text-xs text-neutral-500">Backoffice da plataforma</p>
             </div>
             <button onClick={() => setSidebarOpen(false)} className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-900 lg:hidden">
