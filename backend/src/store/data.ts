@@ -1,0 +1,505 @@
+import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
+import { ApiError } from '../lib/http.js';
+
+export type CompanyStatus = 'trial' | 'active' | 'suspended' | 'cancelled';
+export type ClientRole = 'owner' | 'manager' | 'editor' | 'attendant';
+export type MasterRole = 'super_admin' | 'finance' | 'support' | 'commercial';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  status: 'active' | 'blocked' | 'invited';
+}
+
+export interface Company {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  slug: string;
+  status: CompanyStatus;
+  planCode: string;
+}
+
+export interface CompanyUser {
+  companyId: string;
+  userId: string;
+  role: ClientRole;
+  isActive: boolean;
+}
+
+export interface MasterUser {
+  userId: string;
+  role: MasterRole;
+  isActive: boolean;
+}
+
+export interface PublicSettings {
+  companyId: string;
+  publicName: string;
+  description: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroBadge: string;
+  heroButtonLabel: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  instagramUrl?: string;
+  whatsappPhone?: string;
+}
+
+export interface Category {
+  id: string;
+  companyId: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ProductVariant {
+  id: string;
+  companyId: string;
+  productId: string;
+  label: string;
+  price?: number;
+  stockQuantity: number;
+  isActive: boolean;
+}
+
+export interface Product {
+  id: string;
+  companyId: string;
+  categoryId: string;
+  slug: string;
+  title: string;
+  description: string;
+  price: number;
+  compareAtPrice?: number;
+  stockQuantity: number;
+  variantsEnabled: boolean;
+  features: string[];
+  catalogStatus: 'draft' | 'ready' | 'live';
+  isActive: boolean;
+  isFeatured: boolean;
+  imageUrl: string;
+}
+
+export interface OrderItem {
+  productId: string;
+  variantId?: string;
+  productName: string;
+  variantLabel?: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+}
+
+export interface Order {
+  id: string;
+  companyId: string;
+  orderCode: string;
+  customerName: string;
+  customerPhone?: string;
+  fulfillmentType: 'delivery' | 'pickup';
+  paymentMethod: 'cash' | 'pix' | 'card' | 'online';
+  totalAmount: number;
+  status: 'new' | 'confirmed' | 'paid' | 'sent' | 'cancelled';
+  whatsappUrl?: string;
+  items: OrderItem[];
+  createdAt: string;
+}
+
+export interface AppStore {
+  users: User[];
+  companies: Company[];
+  companyUsers: CompanyUser[];
+  masterUsers: MasterUser[];
+  publicSettings: PublicSettings[];
+  categories: Category[];
+  products: Product[];
+  variants: ProductVariant[];
+  orders: Order[];
+}
+
+const ownerPasswordHash = bcrypt.hashSync('PulseFit@123', 12);
+const masterPasswordHash = bcrypt.hashSync('Master@123', 12);
+
+export function createInitialStore(): AppStore {
+  const pulsefitCompanyId = 'company-pulsefit';
+  const otherCompanyId = 'company-studio-renovo';
+  const ownerId = 'user-pulsefit-owner';
+  const masterId = 'user-master';
+
+  return {
+    users: [
+      {
+        id: ownerId,
+        name: 'PulseFit Owner',
+        email: 'owner@pulsefit.local',
+        passwordHash: ownerPasswordHash,
+        status: 'active' as const
+      },
+      {
+        id: masterId,
+        name: 'Master Admin',
+        email: 'master@catalogos.local',
+        passwordHash: masterPasswordHash,
+        status: 'active' as const
+      }
+    ],
+    companies: [
+      {
+        id: pulsefitCompanyId,
+        ownerUserId: ownerId,
+        name: 'PulseFit',
+        slug: 'pulsefit',
+        status: 'active' as const,
+        planCode: 'silver'
+      },
+      {
+        id: otherCompanyId,
+        ownerUserId: 'user-renovo-owner',
+        name: 'Studio Renovo',
+        slug: 'studio-renovo',
+        status: 'active' as const,
+        planCode: 'bronze'
+      }
+    ],
+    companyUsers: [
+      { companyId: pulsefitCompanyId, userId: ownerId, role: 'owner' as const, isActive: true }
+    ],
+    masterUsers: [
+      { userId: masterId, role: 'super_admin' as const, isActive: true }
+    ],
+    publicSettings: [
+      {
+        companyId: pulsefitCompanyId,
+        publicName: 'PulseFit',
+        description: 'Moda fitness, suplementos e acessorios para treino.',
+        heroTitle: 'PulseFit Catalogo',
+        heroSubtitle: 'Produtos selecionados para treino, performance e rotina.',
+        heroBadge: 'Colecao ativa',
+        heroButtonLabel: 'Ver catalogo',
+        primaryColor: '#16A34A',
+        secondaryColor: '#0F172A',
+        accentColor: '#F8FAFC',
+        instagramUrl: 'https://instagram.com/pulsefit',
+        whatsappPhone: '5571999999999'
+      },
+      {
+        companyId: otherCompanyId,
+        publicName: 'Studio Renovo',
+        description: 'Catalogo demonstrativo de outro tenant.',
+        heroTitle: 'Studio Renovo',
+        heroSubtitle: 'Esse tenant existe para testar isolamento.',
+        heroBadge: 'Tenant isolado',
+        heroButtonLabel: 'Ver catalogo',
+        primaryColor: '#0EA5E9',
+        secondaryColor: '#111827',
+        accentColor: '#F0F9FF'
+      }
+    ],
+    categories: [
+      { id: 'cat-leggings', companyId: pulsefitCompanyId, name: 'Leggings', slug: 'leggings', sortOrder: 1, isActive: true },
+      { id: 'cat-tops', companyId: pulsefitCompanyId, name: 'Tops', slug: 'tops', sortOrder: 2, isActive: true },
+      { id: 'cat-supplements', companyId: pulsefitCompanyId, name: 'Suplementos', slug: 'suplementos', sortOrder: 3, isActive: true },
+      { id: 'cat-renovo', companyId: otherCompanyId, name: 'Servicos', slug: 'servicos', sortOrder: 1, isActive: true }
+    ],
+    products: [
+      {
+        id: 'prod-legging-compressao',
+        companyId: pulsefitCompanyId,
+        categoryId: 'cat-leggings',
+        slug: 'legging-compressao-verde',
+        title: 'Legging Compressao Verde',
+        description: 'Tecido firme, cintura alta e ajuste para treino intenso.',
+        price: 129.9,
+        compareAtPrice: 159.9,
+        stockQuantity: 12,
+        variantsEnabled: true,
+        features: ['Cintura alta', 'Tecido compressivo', 'Secagem rapida'],
+        catalogStatus: 'live' as const,
+        isActive: true,
+        isFeatured: true,
+        imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&q=80'
+      },
+      {
+        id: 'prod-top-media-sustentacao',
+        companyId: pulsefitCompanyId,
+        categoryId: 'cat-tops',
+        slug: 'top-media-sustentacao',
+        title: 'Top Media Sustentacao',
+        description: 'Top com alcas firmes e bojo removivel para treinos diarios.',
+        price: 89.9,
+        stockQuantity: 20,
+        variantsEnabled: false,
+        features: ['Bojo removivel', 'Alcas firmes', 'Conforto diario'],
+        catalogStatus: 'live' as const,
+        isActive: true,
+        isFeatured: false,
+        imageUrl: 'https://images.unsplash.com/photo-1518310383802-640c2de311b2?auto=format&fit=crop&w=900&q=80'
+      },
+      {
+        id: 'prod-whey-baunilha',
+        companyId: pulsefitCompanyId,
+        categoryId: 'cat-supplements',
+        slug: 'whey-protein-baunilha',
+        title: 'Whey Protein Baunilha',
+        description: 'Proteina para suporte de performance e recuperacao muscular.',
+        price: 149.9,
+        stockQuantity: 8,
+        variantsEnabled: false,
+        features: ['900g', 'Sabor baunilha', 'Alto teor proteico'],
+        catalogStatus: 'live' as const,
+        isActive: true,
+        isFeatured: true,
+        imageUrl: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?auto=format&fit=crop&w=900&q=80'
+      },
+      {
+        id: 'prod-renovo-hidden',
+        companyId: otherCompanyId,
+        categoryId: 'cat-renovo',
+        slug: 'servico-isolado',
+        title: 'Servico Isolado',
+        description: 'Produto de outro tenant que nao pode aparecer no PulseFit.',
+        price: 99,
+        stockQuantity: 1,
+        variantsEnabled: false,
+        features: [],
+        catalogStatus: 'live' as const,
+        isActive: true,
+        isFeatured: false,
+        imageUrl: ''
+      }
+    ],
+    variants: [
+      { id: 'var-legging-p', companyId: pulsefitCompanyId, productId: 'prod-legging-compressao', label: 'P', stockQuantity: 4, isActive: true },
+      { id: 'var-legging-m', companyId: pulsefitCompanyId, productId: 'prod-legging-compressao', label: 'M', stockQuantity: 5, isActive: true },
+      { id: 'var-legging-g', companyId: pulsefitCompanyId, productId: 'prod-legging-compressao', label: 'G', stockQuantity: 3, isActive: true }
+    ],
+    orders: [] as Order[]
+  };
+}
+
+export const db = createInitialStore();
+
+export function publicCompanyBySlug(slug: string): Company {
+  const company = db.companies.find((item) => item.slug === slug);
+  if (!company || company.status === 'cancelled' || company.status === 'suspended') {
+    throw new ApiError(404, 'NOT_FOUND', 'Company not available');
+  }
+  return company;
+}
+
+export function getPublicBootstrap(companySlug: string) {
+  const company = publicCompanyBySlug(companySlug);
+  const settings = db.publicSettings.find((item) => item.companyId === company.id);
+  if (!settings) throw new ApiError(404, 'NOT_FOUND', 'Public settings not found');
+
+  const categories = db.categories
+    .filter((item) => item.companyId === company.id && item.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const products = db.products
+    .filter((item) => item.companyId === company.id && item.isActive && item.catalogStatus === 'live')
+    .map((product) => ({
+      ...product,
+      variants: db.variants.filter((variant) => variant.productId === product.id && variant.isActive)
+    }));
+
+  return {
+    company: {
+      id: company.id,
+      slug: company.slug,
+      name: company.name,
+      status: company.status
+    },
+    theme: {
+      primaryColor: settings.primaryColor,
+      secondaryColor: settings.secondaryColor,
+      accentColor: settings.accentColor
+    },
+    hero: {
+      title: settings.heroTitle,
+      subtitle: settings.heroSubtitle,
+      badge: settings.heroBadge,
+      buttonLabel: settings.heroButtonLabel
+    },
+    settings,
+    categories,
+    products
+  };
+}
+
+export function getProductBySlug(companySlug: string, productSlug: string) {
+  const company = publicCompanyBySlug(companySlug);
+  const product = db.products.find(
+    (item) =>
+      item.companyId === company.id &&
+      item.slug === productSlug &&
+      item.isActive &&
+      item.catalogStatus === 'live'
+  );
+  if (!product) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+  return {
+    ...product,
+    variants: db.variants.filter((variant) => variant.productId === product.id && variant.isActive)
+  };
+}
+
+export function createPublicOrder(input: {
+  companySlug: string;
+  customer: {
+    fullName: string;
+    phone?: string;
+    fulfillmentType: 'delivery' | 'pickup';
+    paymentMethod: 'cash' | 'pix' | 'card' | 'online';
+  };
+  items: Array<{ productId: string; variantId?: string | null; quantity: number }>;
+}): Order {
+  const company = publicCompanyBySlug(input.companySlug);
+  if (input.items.length === 0) {
+    throw new ApiError(422, 'VALIDATION_ERROR', 'Order must have at least one item');
+  }
+
+  const orderItems: OrderItem[] = input.items.map((item) => {
+    const product = db.products.find(
+      (candidate) =>
+        candidate.companyId === company.id &&
+        candidate.id === item.productId &&
+        candidate.isActive &&
+        candidate.catalogStatus === 'live'
+    );
+    if (!product) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+
+    const variant = item.variantId
+      ? db.variants.find(
+          (candidate) =>
+            candidate.companyId === company.id &&
+            candidate.productId === product.id &&
+            candidate.id === item.variantId &&
+            candidate.isActive
+        )
+      : undefined;
+
+    if (item.variantId && !variant) {
+      throw new ApiError(404, 'NOT_FOUND', 'Variant not found');
+    }
+
+    const stockTarget = variant ?? product;
+    if (stockTarget.stockQuantity < item.quantity) {
+      throw new ApiError(409, 'INSUFFICIENT_STOCK', 'Insufficient stock');
+    }
+
+    const unitPrice = variant?.price ?? product.price;
+    stockTarget.stockQuantity -= item.quantity;
+
+    return {
+      productId: product.id,
+      variantId: variant?.id,
+      productName: product.title,
+      variantLabel: variant?.label,
+      unitPrice,
+      quantity: item.quantity,
+      subtotal: Number((unitPrice * item.quantity).toFixed(2))
+    };
+  });
+
+  const totalAmount = Number(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+  const settings = db.publicSettings.find((item) => item.companyId === company.id);
+  const orderCode = `ORD-${Date.now().toString(36).toUpperCase()}`;
+  const message = encodeURIComponent(
+    `Novo pedido ${orderCode}\nCliente: ${input.customer.fullName}\nTotal: R$ ${totalAmount.toFixed(2)}`
+  );
+
+  const order: Order = {
+    id: randomUUID(),
+    companyId: company.id,
+    orderCode,
+    customerName: input.customer.fullName,
+    customerPhone: input.customer.phone,
+    fulfillmentType: input.customer.fulfillmentType,
+    paymentMethod: input.customer.paymentMethod,
+    totalAmount,
+    status: 'new',
+    whatsappUrl: settings?.whatsappPhone ? `https://wa.me/${settings.whatsappPhone}?text=${message}` : undefined,
+    items: orderItems,
+    createdAt: new Date().toISOString()
+  };
+  db.orders.push(order);
+  return order;
+}
+
+export function tenantForUser(userId: string) {
+  const companyUser = db.companyUsers.find((item) => item.userId === userId && item.isActive);
+  if (!companyUser) throw new ApiError(403, 'TENANT_REQUIRED', 'Tenant access required');
+  const company = db.companies.find((item) => item.id === companyUser.companyId);
+  if (!company || company.status === 'suspended' || company.status === 'cancelled') {
+    throw new ApiError(403, 'BILLING_PAST_DUE', 'Company is not active');
+  }
+  return {
+    id: company.id,
+    slug: company.slug,
+    name: company.name,
+    role: companyUser.role
+  };
+}
+
+export function masterForUser(userId: string) {
+  const master = db.masterUsers.find((item) => item.userId === userId && item.isActive);
+  if (!master) throw new ApiError(403, 'FORBIDDEN', 'Master access required');
+  return master;
+}
+
+export function createClientAccount(input: {
+  name: string;
+  email: string;
+  passwordHash: string;
+  companyName: string;
+  companySlug: string;
+}) {
+  if (db.users.some((user) => user.email.toLowerCase() === input.email.toLowerCase())) {
+    throw new ApiError(409, 'CONFLICT', 'Email already registered');
+  }
+  if (db.companies.some((company) => company.slug === input.companySlug)) {
+    throw new ApiError(409, 'CONFLICT', 'Company slug already registered');
+  }
+
+  const user: User = {
+    id: randomUUID(),
+    name: input.name,
+    email: input.email.toLowerCase(),
+    passwordHash: input.passwordHash,
+    status: 'active'
+  };
+  const company: Company = {
+    id: randomUUID(),
+    ownerUserId: user.id,
+    name: input.companyName,
+    slug: input.companySlug,
+    status: 'trial',
+    planCode: 'bronze'
+  };
+
+  db.users.push(user);
+  db.companies.push(company);
+  db.companyUsers.push({ companyId: company.id, userId: user.id, role: 'owner', isActive: true });
+  db.publicSettings.push({
+    companyId: company.id,
+    publicName: company.name,
+    description: 'Novo catalogo em configuracao.',
+    heroTitle: company.name,
+    heroSubtitle: 'Configure produtos e aparencia na central.',
+    heroBadge: 'Novo catalogo',
+    heroButtonLabel: 'Ver catalogo',
+    primaryColor: '#16A34A',
+    secondaryColor: '#0F172A',
+    accentColor: '#F8FAFC'
+  });
+
+  return { user, company };
+}
