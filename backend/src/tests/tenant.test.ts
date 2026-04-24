@@ -62,4 +62,65 @@ describe('multi-tenant foundation', () => {
     expect(titles).toContain('Whey Protein Baunilha');
     expect(titles).not.toContain('Servico Isolado');
   });
+
+  it('allows tenant product and category CRUD without accepting another tenant category', async () => {
+    const agent = request.agent(app);
+    await agent
+      .post('/api/auth/login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(200);
+
+    const categoryResponse = await agent
+      .post('/api/client/categories')
+      .set('X-Client-Request', 'true')
+      .send({ name: 'Acessorios Teste', slug: 'acessorios-teste' })
+      .expect(201);
+
+    await agent
+      .post('/api/client/products')
+      .set('X-Client-Request', 'true')
+      .send({
+        categoryId: 'cat-renovo',
+        title: 'Produto Tenant Errado',
+        slug: 'produto-tenant-errado',
+        price: 10,
+        stockQuantity: 1
+      })
+      .expect(422);
+
+    const productResponse = await agent
+      .post('/api/client/products')
+      .set('X-Client-Request', 'true')
+      .send({
+        categoryId: categoryResponse.body.data.id,
+        title: 'Corda de Treino',
+        slug: 'corda-de-treino',
+        description: 'Acessorio para aquecimento.',
+        price: 39.9,
+        stockQuantity: 7,
+        catalogStatus: 'ready'
+      })
+      .expect(201);
+
+    await agent
+      .patch(`/api/client/products/${productResponse.body.data.id}/status`)
+      .set('X-Client-Request', 'true')
+      .send({ catalogStatus: 'live', isActive: true })
+      .expect(200);
+
+    await agent
+      .delete(`/api/client/categories/${categoryResponse.body.data.id}`)
+      .set('X-Client-Request', 'true')
+      .expect(409);
+
+    await agent
+      .delete(`/api/client/products/${productResponse.body.data.id}`)
+      .set('X-Client-Request', 'true')
+      .expect(204);
+
+    await agent
+      .delete(`/api/client/categories/${categoryResponse.body.data.id}`)
+      .set('X-Client-Request', 'true')
+      .expect(204);
+  });
 });

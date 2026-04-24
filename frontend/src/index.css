@@ -381,6 +381,99 @@ button {
   border-radius: 8px;
 }
 
+.compact-section {
+  margin-bottom: 24px;
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.workbench-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+}
+
+.workbench-panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.workbench-panel input,
+.workbench-panel select,
+.workbench-panel textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.workbench-panel textarea {
+  min-height: 84px;
+  padding-top: 10px;
+  resize: vertical;
+}
+
+.workbench-panel button,
+.row-actions button,
+.category-chip button {
+  min-height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.category-chip button {
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row-actions button {
+  padding: 0 10px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -405,7 +498,8 @@ td {
   }
 
   .product-grid,
-  .metric-grid {
+  .metric-grid,
+  .workbench-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -422,7 +516,9 @@ td {
   }
 
   .product-grid,
-  .metric-grid {
+  .metric-grid,
+  .workbench-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }

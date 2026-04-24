@@ -11,9 +11,11 @@ import {
   type Order,
   type OrderItem,
   type Product,
+  type ProductWriteInput,
   type ProductVariant,
   type PublicBootstrap,
   type PublicSettings,
+  type CategoryWriteInput,
   type TenantContextData,
   type User
 } from '../store/data.js';
@@ -441,6 +443,88 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     return Promise.all((data ?? []).map(async (row: Row) => mapProduct(row, await this.getPrimaryImageUrl(companyId, getString(row, 'id')))));
   }
 
+  async createClientProduct(companyId: string, input: ProductWriteInput): Promise<Product> {
+    await this.assertCategoryBelongsToCompany(companyId, input.categoryId);
+    const { data, error } = await this.client
+      .from('products')
+      .insert({
+        company_id: companyId,
+        category_id: input.categoryId,
+        slug: input.slug,
+        title: input.title,
+        description: input.description,
+        price: input.price,
+        compare_at_price: input.compareAtPrice,
+        stock_quantity: input.stockQuantity,
+        variants_enabled: input.variantsEnabled ?? false,
+        features: input.features ?? [],
+        catalog_status: input.catalogStatus ?? 'draft',
+        is_active: input.isActive ?? true,
+        is_featured: input.isFeatured ?? false
+      })
+      .select('*')
+      .single();
+    if (error) this.handleConstraintError(error, 'Product slug already exists');
+    const product = mapProduct(data);
+    if (input.imageUrl) await this.upsertPrimaryImage(companyId, product.id, input.imageUrl);
+    return { ...product, imageUrl: input.imageUrl ?? '' };
+  }
+
+  async updateClientProduct(companyId: string, productId: string, input: Partial<ProductWriteInput>): Promise<Product> {
+    if (input.categoryId) await this.assertCategoryBelongsToCompany(companyId, input.categoryId);
+    const patch: Row = {};
+    if (input.categoryId !== undefined) patch.category_id = input.categoryId;
+    if (input.slug !== undefined) patch.slug = input.slug;
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.price !== undefined) patch.price = input.price;
+    if (input.compareAtPrice !== undefined) patch.compare_at_price = input.compareAtPrice;
+    if (input.stockQuantity !== undefined) patch.stock_quantity = input.stockQuantity;
+    if (input.variantsEnabled !== undefined) patch.variants_enabled = input.variantsEnabled;
+    if (input.features !== undefined) patch.features = input.features;
+    if (input.catalogStatus !== undefined) patch.catalog_status = input.catalogStatus;
+    if (input.isActive !== undefined) patch.is_active = input.isActive;
+    if (input.isFeatured !== undefined) patch.is_featured = input.isFeatured;
+
+    const { data, error } = await this.client
+      .from('products')
+      .update(patch)
+      .eq('company_id', companyId)
+      .eq('id', productId)
+      .select('*')
+      .maybeSingle();
+    if (error) this.handleConstraintError(error, 'Product slug already exists');
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    if (input.imageUrl !== undefined) await this.upsertPrimaryImage(companyId, productId, input.imageUrl);
+    return mapProduct(data, input.imageUrl ?? (await this.getPrimaryImageUrl(companyId, productId)));
+  }
+
+  async updateClientProductStatus(companyId: string, productId: string, input: { isActive?: boolean; catalogStatus?: Product['catalogStatus'] }): Promise<Product> {
+    const patch: Row = {};
+    if (input.isActive !== undefined) patch.is_active = input.isActive;
+    if (input.catalogStatus !== undefined) patch.catalog_status = input.catalogStatus;
+    const { data, error } = await this.client
+      .from('products')
+      .update(patch)
+      .eq('company_id', companyId)
+      .eq('id', productId)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    return mapProduct(data, await this.getPrimaryImageUrl(companyId, productId));
+  }
+
+  async deleteClientProduct(companyId: string, productId: string): Promise<void> {
+    const { error, count } = await this.client
+      .from('products')
+      .delete({ count: 'exact' })
+      .eq('company_id', companyId)
+      .eq('id', productId);
+    if (error) throw error;
+    if (!count) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+  }
+
   async bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]> {
     const { data, error } = await this.client
       .from('products')
@@ -456,6 +540,58 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     const { data, error } = await this.client.from('categories').select('*').eq('company_id', companyId).order('sort_order');
     if (error) throw error;
     return (data ?? []).map((row: Row) => mapCategory(row));
+  }
+
+  async createClientCategory(companyId: string, input: CategoryWriteInput): Promise<Category> {
+    const { data, error } = await this.client
+      .from('categories')
+      .insert({
+        company_id: companyId,
+        name: input.name,
+        slug: input.slug,
+        sort_order: input.sortOrder ?? 0,
+        is_active: input.isActive ?? true
+      })
+      .select('*')
+      .single();
+    if (error) this.handleConstraintError(error, 'Category slug already exists');
+    return mapCategory(data);
+  }
+
+  async updateClientCategory(companyId: string, categoryId: string, input: Partial<CategoryWriteInput>): Promise<Category> {
+    const patch: Row = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.slug !== undefined) patch.slug = input.slug;
+    if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
+    if (input.isActive !== undefined) patch.is_active = input.isActive;
+    const { data, error } = await this.client
+      .from('categories')
+      .update(patch)
+      .eq('company_id', companyId)
+      .eq('id', categoryId)
+      .select('*')
+      .maybeSingle();
+    if (error) this.handleConstraintError(error, 'Category slug already exists');
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Category not found');
+    return mapCategory(data);
+  }
+
+  async deleteClientCategory(companyId: string, categoryId: string): Promise<void> {
+    const { count: productCount, error: productError } = await this.client
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('category_id', categoryId);
+    if (productError) throw productError;
+    if (productCount && productCount > 0) throw new ApiError(409, 'CONFLICT', 'Category has products');
+
+    const { error, count } = await this.client
+      .from('categories')
+      .delete({ count: 'exact' })
+      .eq('company_id', companyId)
+      .eq('id', categoryId);
+    if (error) throw error;
+    if (!count) throw new ApiError(404, 'NOT_FOUND', 'Category not found');
   }
 
   async listClientOrders(companyId: string): Promise<Order[]> {
@@ -557,6 +693,46 @@ export class SupabaseCatalogRepository implements CatalogRepository {
       .maybeSingle();
     if (error) throw error;
     return data ? getString(data, 'url') : '';
+  }
+
+  private async upsertPrimaryImage(companyId: string, productId: string, imageUrl: string): Promise<void> {
+    if (!imageUrl) {
+      await this.client.from('product_images').delete().eq('company_id', companyId).eq('product_id', productId);
+      return;
+    }
+    const { error } = await this.client.from('product_images').upsert(
+      {
+        company_id: companyId,
+        product_id: productId,
+        url: imageUrl,
+        sort_order: 1
+      },
+      { onConflict: 'company_id,product_id,url' }
+    );
+    if (error) throw error;
+  }
+
+  private async assertCategoryBelongsToCompany(companyId: string, categoryId: string): Promise<void> {
+    const { data, error } = await this.client
+      .from('categories')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('id', categoryId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(422, 'VALIDATION_ERROR', 'Category does not belong to tenant');
+  }
+
+  private handleConstraintError(error: unknown, conflictMessage: string): never {
+    if (
+      typeof error === 'object' &&
+      error &&
+      'code' in error &&
+      ((error as { code?: string }).code === '23505' || (error as { code?: string }).code === '23503')
+    ) {
+      throw new ApiError((error as { code?: string }).code === '23505' ? 409 : 422, (error as { code?: string }).code === '23505' ? 'CONFLICT' : 'VALIDATION_ERROR', conflictMessage);
+    }
+    throw error;
   }
 
   private async listAllOrders(): Promise<Order[]> {

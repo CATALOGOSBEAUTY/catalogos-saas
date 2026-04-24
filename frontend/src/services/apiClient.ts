@@ -22,6 +22,8 @@ export interface PublicProduct {
   stockQuantity: number;
   variantsEnabled: boolean;
   features: string[];
+  catalogStatus?: 'draft' | 'ready' | 'live';
+  isActive?: boolean;
   isFeatured: boolean;
   imageUrl: string;
   variants: PublicVariant[];
@@ -119,6 +121,51 @@ export const api = {
   },
   clientProducts() {
     return request<PublicProduct[]>('/api/client/products');
+  },
+  clientCategories() {
+    return request<PublicCategory[]>('/api/client/categories');
+  },
+  createClientCategory(body: { name: string; slug?: string }) {
+    return request<PublicCategory>('/api/client/categories', {
+      method: 'POST',
+      headers: { 'X-Client-Request': 'true' },
+      body: JSON.stringify(body)
+    });
+  },
+  deleteClientCategory(categoryId: string) {
+    return request<void>(`/api/client/categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: { 'X-Client-Request': 'true' }
+    });
+  },
+  createClientProduct(body: {
+    categoryId: string;
+    title: string;
+    slug?: string;
+    description?: string;
+    price: number;
+    stockQuantity: number;
+    catalogStatus?: 'draft' | 'ready' | 'live';
+    imageUrl?: string;
+  }) {
+    return request<PublicProduct>('/api/client/products', {
+      method: 'POST',
+      headers: { 'X-Client-Request': 'true' },
+      body: JSON.stringify(body)
+    });
+  },
+  updateClientProductStatus(productId: string, body: { isActive?: boolean; catalogStatus?: 'draft' | 'ready' | 'live' }) {
+    return request<PublicProduct>(`/api/client/products/${productId}/status`, {
+      method: 'PATCH',
+      headers: { 'X-Client-Request': 'true' },
+      body: JSON.stringify(body)
+    });
+  },
+  deleteClientProduct(productId: string) {
+    return request<void>(`/api/client/products/${productId}`, {
+      method: 'DELETE',
+      headers: { 'X-Client-Request': 'true' }
+    });
   },
   masterDashboard() {
     return request('/api/master/dashboard');

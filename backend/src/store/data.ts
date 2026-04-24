@@ -187,8 +187,15 @@ export interface CatalogRepository {
     revenueTotal: number;
   }>;
   listClientProducts(companyId: string): Promise<Product[]>;
+  createClientProduct(companyId: string, input: ProductWriteInput): Promise<Product>;
+  updateClientProduct(companyId: string, productId: string, input: Partial<ProductWriteInput>): Promise<Product>;
+  updateClientProductStatus(companyId: string, productId: string, input: { isActive?: boolean; catalogStatus?: Product['catalogStatus'] }): Promise<Product>;
+  deleteClientProduct(companyId: string, productId: string): Promise<void>;
   bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]>;
   listClientCategories(companyId: string): Promise<Category[]>;
+  createClientCategory(companyId: string, input: CategoryWriteInput): Promise<Category>;
+  updateClientCategory(companyId: string, categoryId: string, input: Partial<CategoryWriteInput>): Promise<Category>;
+  deleteClientCategory(companyId: string, categoryId: string): Promise<void>;
   listClientOrders(companyId: string): Promise<Order[]>;
   getMasterDashboard(): Promise<{
     companiesTotal: number;
@@ -197,6 +204,29 @@ export interface CatalogRepository {
     revenueTotal: number;
   }>;
   listMasterCompanies(): Promise<Array<Company & { productsTotal: number; ordersTotal: number }>>;
+}
+
+export interface ProductWriteInput {
+  categoryId: string;
+  slug: string;
+  title: string;
+  description: string;
+  price: number;
+  compareAtPrice?: number;
+  stockQuantity: number;
+  variantsEnabled?: boolean;
+  features?: string[];
+  catalogStatus?: Product['catalogStatus'];
+  isActive?: boolean;
+  isFeatured?: boolean;
+  imageUrl?: string;
+}
+
+export interface CategoryWriteInput {
+  name: string;
+  slug: string;
+  sortOrder?: number;
+  isActive?: boolean;
 }
 
 const ownerPasswordHash = bcrypt.hashSync('PulseFit@123', 12);
@@ -660,6 +690,70 @@ export class MemoryCatalogRepository implements CatalogRepository {
     return db.products.filter((item) => item.companyId === companyId);
   }
 
+  async createClientProduct(companyId: string, input: ProductWriteInput): Promise<Product> {
+    if (!db.categories.some((category) => category.companyId === companyId && category.id === input.categoryId)) {
+      throw new ApiError(422, 'VALIDATION_ERROR', 'Category does not belong to tenant');
+    }
+    if (db.products.some((product) => product.companyId === companyId && product.slug === input.slug)) {
+      throw new ApiError(409, 'CONFLICT', 'Product slug already exists');
+    }
+    const product: Product = {
+      id: randomUUID(),
+      companyId,
+      categoryId: input.categoryId,
+      slug: input.slug,
+      title: input.title,
+      description: input.description,
+      price: input.price,
+      compareAtPrice: input.compareAtPrice,
+      stockQuantity: input.stockQuantity,
+      variantsEnabled: input.variantsEnabled ?? false,
+      features: input.features ?? [],
+      catalogStatus: input.catalogStatus ?? 'draft',
+      isActive: input.isActive ?? true,
+      isFeatured: input.isFeatured ?? false,
+      imageUrl: input.imageUrl ?? ''
+    };
+    db.products.push(product);
+    return product;
+  }
+
+  async updateClientProduct(companyId: string, productId: string, input: Partial<ProductWriteInput>): Promise<Product> {
+    const product = db.products.find((item) => item.companyId === companyId && item.id === productId);
+    if (!product) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    if (input.categoryId && !db.categories.some((category) => category.companyId === companyId && category.id === input.categoryId)) {
+      throw new ApiError(422, 'VALIDATION_ERROR', 'Category does not belong to tenant');
+    }
+    if (input.slug && db.products.some((item) => item.companyId === companyId && item.slug === input.slug && item.id !== productId)) {
+      throw new ApiError(409, 'CONFLICT', 'Product slug already exists');
+    }
+    Object.assign(product, {
+      ...input,
+      compareAtPrice: input.compareAtPrice ?? product.compareAtPrice,
+      variantsEnabled: input.variantsEnabled ?? product.variantsEnabled,
+      features: input.features ?? product.features,
+      catalogStatus: input.catalogStatus ?? product.catalogStatus,
+      isActive: input.isActive ?? product.isActive,
+      isFeatured: input.isFeatured ?? product.isFeatured,
+      imageUrl: input.imageUrl ?? product.imageUrl
+    });
+    return product;
+  }
+
+  async updateClientProductStatus(companyId: string, productId: string, input: { isActive?: boolean; catalogStatus?: Product['catalogStatus'] }): Promise<Product> {
+    const product = db.products.find((item) => item.companyId === companyId && item.id === productId);
+    if (!product) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    if (typeof input.isActive === 'boolean') product.isActive = input.isActive;
+    if (input.catalogStatus) product.catalogStatus = input.catalogStatus;
+    return product;
+  }
+
+  async deleteClientProduct(companyId: string, productId: string): Promise<void> {
+    const index = db.products.findIndex((item) => item.companyId === companyId && item.id === productId);
+    if (index === -1) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    db.products.splice(index, 1);
+  }
+
   async bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]> {
     return db.products
       .filter((item) => item.companyId === companyId && productIds.includes(item.id))
@@ -671,6 +765,45 @@ export class MemoryCatalogRepository implements CatalogRepository {
 
   async listClientCategories(companyId: string): Promise<Category[]> {
     return db.categories.filter((item) => item.companyId === companyId);
+  }
+
+  async createClientCategory(companyId: string, input: CategoryWriteInput): Promise<Category> {
+    if (db.categories.some((category) => category.companyId === companyId && category.slug === input.slug)) {
+      throw new ApiError(409, 'CONFLICT', 'Category slug already exists');
+    }
+    const category: Category = {
+      id: randomUUID(),
+      companyId,
+      name: input.name,
+      slug: input.slug,
+      sortOrder: input.sortOrder ?? 0,
+      isActive: input.isActive ?? true
+    };
+    db.categories.push(category);
+    return category;
+  }
+
+  async updateClientCategory(companyId: string, categoryId: string, input: Partial<CategoryWriteInput>): Promise<Category> {
+    const category = db.categories.find((item) => item.companyId === companyId && item.id === categoryId);
+    if (!category) throw new ApiError(404, 'NOT_FOUND', 'Category not found');
+    if (input.slug && db.categories.some((item) => item.companyId === companyId && item.slug === input.slug && item.id !== categoryId)) {
+      throw new ApiError(409, 'CONFLICT', 'Category slug already exists');
+    }
+    Object.assign(category, {
+      ...input,
+      sortOrder: input.sortOrder ?? category.sortOrder,
+      isActive: input.isActive ?? category.isActive
+    });
+    return category;
+  }
+
+  async deleteClientCategory(companyId: string, categoryId: string): Promise<void> {
+    if (db.products.some((product) => product.companyId === companyId && product.categoryId === categoryId)) {
+      throw new ApiError(409, 'CONFLICT', 'Category has products');
+    }
+    const index = db.categories.findIndex((item) => item.companyId === companyId && item.id === categoryId);
+    if (index === -1) throw new ApiError(404, 'NOT_FOUND', 'Category not found');
+    db.categories.splice(index, 1);
   }
 
   async listClientOrders(companyId: string): Promise<Order[]> {
