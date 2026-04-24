@@ -53,6 +53,21 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
+  if (
+    error instanceof SyntaxError &&
+    'status' in error &&
+    (error as { status?: number }).status === 400 &&
+    'body' in error
+  ) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_JSON',
+        message: 'Request body must be valid JSON'
+      }
+    });
+    return;
+  }
+
   if (error instanceof ApiError) {
     res.status(error.statusCode).json({
       error: {

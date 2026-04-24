@@ -192,4 +192,14 @@ describe('multi-tenant foundation', () => {
       .attach('image', Buffer.from('not-a-real-image'), { filename: 'fake.png', contentType: 'image/png' })
       .expect(422);
   });
+
+  it('returns 400 for malformed JSON payloads', async () => {
+    const response = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{bad-json')
+      .expect(400);
+
+    expect(response.body.error.code).toBe('INVALID_JSON');
+  });
 });
