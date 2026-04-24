@@ -32,6 +32,22 @@ npm test
 npm run build
 ```
 
+## Deploy
+
+Frontend Vercel:
+
+```powershell
+cd frontend
+vercel deploy --prod
+```
+
+Backend Render:
+
+- usar `render.yaml`;
+- configurar `DATA_PROVIDER=supabase`;
+- configurar `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`;
+- configurar `JWT_SECRET`, `COOKIE_SECRET` e `CORS_ORIGINS`.
+
 ## Seguranca
 
 - Nunca versionar `.env` real.
