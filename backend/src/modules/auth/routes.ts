@@ -22,6 +22,19 @@ function publicUser(user: { id: string; name: string; email: string }) {
   return { id: user.id, name: user.name, email: user.email };
 }
 
+async function authenticateCredentials(emailValue: unknown, passwordValue: unknown) {
+  const email = requireString(emailValue, 'email').toLowerCase();
+  const password = requireString(passwordValue, 'password');
+  const repository = getRepository();
+  const user = await repository.findUserByEmail(email);
+  if (!user || user.status !== 'active') {
+    throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
+  }
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
+  return { user, repository };
+}
+
 authRouter.post(
   '/register',
   asyncHandler(async (req, res) => {
@@ -53,15 +66,7 @@ authRouter.post(
   '/login',
   loginRateLimit,
   asyncHandler(async (req, res) => {
-    const email = requireString(req.body?.email, 'email').toLowerCase();
-    const password = requireString(req.body?.password, 'password');
-    const repository = getRepository();
-    const user = await repository.findUserByEmail(email);
-    if (!user || user.status !== 'active') {
-      throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
-    }
-    const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
+    const { user, repository } = await authenticateCredentials(req.body?.email, req.body?.password);
 
     const master = await repository.getMasterForUser(user.id);
     const type = master ? 'master' : 'client';
@@ -74,6 +79,46 @@ authRouter.post(
       user: publicUser(user),
       companies,
       master: master ? { role: master.role } : null
+    });
+  })
+);
+
+authRouter.post(
+  '/client-login',
+  loginRateLimit,
+  asyncHandler(async (req, res) => {
+    const { user, repository } = await authenticateCredentials(req.body?.email, req.body?.password);
+    const tenant = await repository.getTenantForUser(user.id).catch(() => null);
+    if (!tenant) throw new ApiError(403, 'FORBIDDEN', 'Client access required');
+
+    const token = createSession({ sub: user.id, email: user.email, type: 'client' });
+    setSessionCookie(res, token);
+
+    ok(res, {
+      user: publicUser(user),
+      tenant,
+      companies: await repository.getLoginCompanies(user.id),
+      master: null
+    });
+  })
+);
+
+authRouter.post(
+  '/master-login',
+  loginRateLimit,
+  asyncHandler(async (req, res) => {
+    const { user, repository } = await authenticateCredentials(req.body?.email, req.body?.password);
+    const master = await repository.getMasterForUser(user.id);
+    if (!master) throw new ApiError(403, 'FORBIDDEN', 'Master access required');
+
+    const token = createSession({ sub: user.id, email: user.email, type: 'master' });
+    setSessionCookie(res, token);
+
+    ok(res, {
+      user: publicUser(user),
+      tenant: null,
+      companies: [],
+      master: { role: master.role }
     });
   })
 );

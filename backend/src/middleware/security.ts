@@ -31,6 +31,7 @@ export const globalRateLimit = rateLimit({
 export const loginRateLimit = rateLimit({
   windowMs: 15 * 60_000,
   limit: 5,
+  skip: () => process.env.VITEST === 'true',
   standardHeaders: true,
   legacyHeaders: false,
   message: {

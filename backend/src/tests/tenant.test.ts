@@ -62,6 +62,34 @@ describe('multi-tenant foundation', () => {
     await agent.get('/api/master/dashboard').expect(403);
   });
 
+  it('separates client and master login entry points', async () => {
+    await request(app)
+      .post('/api/auth/client-login')
+      .send({ email: 'master@catalogos.local', password: 'Master@123' })
+      .expect(403);
+
+    await request(app)
+      .post('/api/auth/master-login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(403);
+
+    const clientLogin = await request(app)
+      .post('/api/auth/client-login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(200);
+
+    expect(clientLogin.body.data.tenant.slug).toBe('pulsefit');
+    expect(clientLogin.body.data.master).toBeNull();
+
+    const masterLogin = await request(app)
+      .post('/api/auth/master-login')
+      .send({ email: 'master@catalogos.local', password: 'Master@123' })
+      .expect(200);
+
+    expect(masterLogin.body.data.master.role).toBe('super_admin');
+    expect(masterLogin.body.data.tenant).toBeNull();
+  });
+
   it('allows client session to read only its tenant products', async () => {
     const agent = request.agent(app);
     await agent

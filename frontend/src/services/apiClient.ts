@@ -130,6 +130,24 @@ export const api = {
       body: JSON.stringify({ email, password })
     });
   },
+  clientLogin(email: string, password: string) {
+    return request<SessionResponse>('/api/auth/client-login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+  },
+  masterLogin(email: string, password: string) {
+    return request<SessionResponse>('/api/auth/master-login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+  },
+  logout() {
+    return request<void>('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+  },
   me() {
     return request<SessionResponse>('/api/auth/me');
   },
@@ -141,6 +159,9 @@ export const api = {
   },
   clientCategories() {
     return request<PublicCategory[]>('/api/client/categories');
+  },
+  clientOrders() {
+    return request('/api/client/orders');
   },
   createClientCategory(body: { name: string; slug?: string }) {
     return request<PublicCategory>('/api/client/categories', {

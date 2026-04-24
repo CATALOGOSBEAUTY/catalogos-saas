@@ -7,12 +7,16 @@ import { PublicStore } from './modules/public-store/PublicStore';
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/loja/pulsefit/catalogo" replace />} />
+      <Route path="/" element={<Navigate to="/loja/pulsefit/inicio" replace />} />
       <Route path="/loja/:companySlug/*" element={<PublicStore />} />
-      <Route path="/login" element={<LoginView />} />
-      <Route path="/app/*" element={<ClientDashboard />} />
-      <Route path="/master/*" element={<MasterDashboard />} />
-      <Route path="*" element={<Navigate to="/loja/pulsefit/catalogo" replace />} />
+      <Route path="/login" element={<Navigate to="/cliente/login" replace />} />
+      <Route path="/cliente/login" element={<LoginView mode="client" />} />
+      <Route path="/master/login" element={<LoginView mode="master" />} />
+      <Route path="/app/*" element={<Navigate to="/cliente/app/dashboard" replace />} />
+      <Route path="/cliente/app/*" element={<ClientDashboard />} />
+      <Route path="/master" element={<Navigate to="/master/app/dashboard" replace />} />
+      <Route path="/master/app/*" element={<MasterDashboard />} />
+      <Route path="*" element={<Navigate to="/loja/pulsefit/inicio" replace />} />
     </Routes>
   );
 }
