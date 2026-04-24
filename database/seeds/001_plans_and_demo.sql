@@ -2,7 +2,9 @@ insert into public.plans (id, name, code, description, price_monthly, product_li
 values
   ('00000000-0000-4000-8000-000000000001', 'Bronze', 'bronze', 'Catalogo publico, pedidos por WhatsApp e painel basico.', 49.90, 50, 1, 100, 1),
   ('00000000-0000-4000-8000-000000000002', 'Silver', 'silver', 'Mais produtos, usuarios e personalizacao.', 149.90, 150, 2, 500, 2),
-  ('00000000-0000-4000-8000-000000000003', 'Gold', 'gold', 'Relatorios, cupons e pagamentos online.', 299.90, 250, 5, 1024, 3)
+  ('00000000-0000-4000-8000-000000000003', 'Gold', 'gold', 'Relatorios, cupons e pagamentos online.', 299.90, 250, 5, 1024, 3),
+  ('00000000-0000-4000-8000-000000000004', 'Platinum', 'platinum', 'WhatsApp Pro, suporte prioritario e automacoes.', 397.90, 500, 10, 3072, 4),
+  ('00000000-0000-4000-8000-000000000005', 'Enterprise', 'enterprise', 'Multiunidade, suporte dedicado e limites customizados.', 497.90, 1000, 99, 10240, 5)
 on conflict (code) do update set
   name = excluded.name,
   description = excluded.description,
@@ -10,6 +12,20 @@ on conflict (code) do update set
   product_limit = excluded.product_limit,
   user_limit = excluded.user_limit,
   storage_limit_mb = excluded.storage_limit_mb;
+
+insert into public.modules (code, name, description, price_monthly, is_active)
+values
+  ('advanced_reports', 'Relatorios avancados', 'Indicadores de venda, conversao e catalogo.', 49.90, true),
+  ('whatsapp_pro', 'WhatsApp Pro', 'Recursos extras para atendimento e automacao.', 79.90, true),
+  ('online_payments', 'Pagamento online', 'Checkout e gateway de pagamento.', 69.90, true),
+  ('coupons', 'Cupons e promocoes', 'Cupons, campanhas e descontos controlados.', 39.90, true),
+  ('custom_domain', 'Dominio proprio', 'Uso de dominio personalizado por cliente.', 29.90, true),
+  ('chatbot', 'Chatbot', 'Atendimento automatico conectado ao catalogo.', 99.90, true)
+on conflict (code) do update set
+  name = excluded.name,
+  description = excluded.description,
+  price_monthly = excluded.price_monthly,
+  is_active = excluded.is_active;
 
 insert into public.users (id, name, email, password_hash)
 values ('10000000-0000-4000-8000-000000000001', 'PulseFit Owner', 'owner@pulsefit.local', '$2a$12$a3ee34OQLHu0oouP5ZwS5.cKq/ZQMaHotTdSArjKP3eX/jizE8d.y')

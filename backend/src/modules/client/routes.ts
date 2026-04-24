@@ -4,7 +4,7 @@ import { ApiError, asyncHandler, created, noContent, ok, requireString } from '.
 import { requireAuth, requireRole, requireTenant } from '../../middleware/auth.js';
 import { getRepository } from '../../repositories/index.js';
 import { uploadProductImage } from '../../services/productMedia.js';
-import type { Product } from '../../store/data.js';
+import type { Order, Product } from '../../store/data.js';
 
 export const clientRouter = Router();
 const imageUpload = multer({
@@ -84,6 +84,77 @@ function parseCatalogStatus(value: unknown): Product['catalogStatus'] | undefine
   if (value === 'draft' || value === 'ready' || value === 'live') return value;
   throw new ApiError(422, 'VALIDATION_ERROR', 'catalogStatus is invalid');
 }
+
+function parseOrderStatus(value: unknown): Order['status'] {
+  if (value === 'new' || value === 'confirmed' || value === 'paid' || value === 'sent' || value === 'cancelled') return value;
+  throw new ApiError(422, 'VALIDATION_ERROR', 'status is invalid');
+}
+
+function publicSettingsPatch(body: Record<string, unknown>) {
+  const allowed = [
+    'publicName',
+    'description',
+    'logoUrl',
+    'coverUrl',
+    'heroTitle',
+    'heroSubtitle',
+    'heroBadge',
+    'heroButtonLabel',
+    'primaryColor',
+    'secondaryColor',
+    'accentColor',
+    'instagramUrl',
+    'whatsappPhone',
+    'address',
+    'businessHours',
+    'seoTitle',
+    'seoDescription'
+  ];
+  return Object.fromEntries(allowed.flatMap((key) => (typeof body[key] === 'string' ? [[key, body[key]]] : [])));
+}
+
+clientRouter.get(
+  '/usage',
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().getClientUsage(req.tenant!.id));
+  })
+);
+
+clientRouter.get(
+  '/settings/public',
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().getClientPublicSettings(req.tenant!.id));
+  })
+);
+
+clientRouter.put(
+  '/settings/public',
+  requireRole(['owner', 'manager']),
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().updateClientPublicSettings(req.tenant!.id, publicSettingsPatch(req.body ?? {})));
+  })
+);
+
+clientRouter.get(
+  '/billing/subscription',
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().getClientBillingSubscription(req.tenant!.id));
+  })
+);
+
+clientRouter.get(
+  '/billing/invoices',
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().listClientInvoices(req.tenant!.id));
+  })
+);
+
+clientRouter.get(
+  '/modules',
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().listClientModules(req.tenant!.id));
+  })
+);
 
 clientRouter.post(
   '/products',
@@ -243,5 +314,13 @@ clientRouter.get(
       res,
       await getRepository().listClientOrders(req.tenant!.id)
     );
+  })
+);
+
+clientRouter.patch(
+  '/orders/:id/status',
+  requireRole(['owner', 'manager', 'attendant']),
+  asyncHandler(async (req, res) => {
+    ok(res, await getRepository().updateClientOrderStatus(req.tenant!.id, req.params.id, parseOrderStatus(req.body?.status)));
   })
 );

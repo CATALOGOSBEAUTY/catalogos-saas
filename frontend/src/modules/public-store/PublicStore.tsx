@@ -141,7 +141,7 @@ export function PublicStore() {
     <div className="min-h-screen bg-neutral-50 text-neutral-900 selection:bg-purple-200">
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-neutral-200 bg-white/80 px-6 backdrop-blur-md lg:px-16">
         <button className="flex items-center gap-2" onClick={() => goToTab('inicio')}>
-          <img src="/assets/pulsefit-logo-transparent.png" alt={bootstrap.settings.publicName} className="h-10 w-36 object-contain object-left" />
+          <img src={bootstrap.settings.logoUrl || '/assets/pulsefit-logo-transparent.png'} alt={bootstrap.settings.publicName} className="h-10 w-36 object-contain object-left" />
         </button>
         <nav className="hidden gap-8 text-sm font-medium uppercase tracking-wider text-neutral-500 md:flex">
           {(['inicio', 'catalogo', 'contato'] as const).map((tab) => (
@@ -168,9 +168,13 @@ export function PublicStore() {
       {activeTab === 'inicio' ? (
         <section className="relative flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden bg-white">
           <div className="absolute inset-0 bg-white">
-            <video autoPlay loop muted playsInline className="h-full w-full object-cover opacity-[0.18] grayscale mix-blend-multiply">
-              <source src="https://videos.pexels.com/video-files/6550881/6550881-uhd_2560_1440_30fps.mp4" type="video/mp4" />
-            </video>
+            {bootstrap.settings.coverUrl ? (
+              <img src={bootstrap.settings.coverUrl} alt="" className="h-full w-full object-cover opacity-[0.18] grayscale mix-blend-multiply" />
+            ) : (
+              <video autoPlay loop muted playsInline className="h-full w-full object-cover opacity-[0.18] grayscale mix-blend-multiply">
+                <source src="https://videos.pexels.com/video-files/6550881/6550881-uhd_2560_1440_30fps.mp4" type="video/mp4" />
+              </video>
+            )}
             <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-purple-100/35" />
             <div className="dot-pattern absolute inset-0 opacity-60" />
           </div>
@@ -376,12 +380,41 @@ export function PublicStore() {
       ) : null}
 
       {activeTab === 'contato' ? (
-        <section className="grid min-h-[calc(100vh-4rem)] place-items-center bg-neutral-50 p-8">
-          <div className="max-w-xl rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
-            <Store className="mx-auto mb-4 h-10 w-10 text-purple-600" />
-            <h1 className="mb-2 text-3xl font-bold uppercase tracking-tight">Contato</h1>
-            <p className="text-neutral-500">{bootstrap.settings.description}</p>
-            {bootstrap.settings.whatsappPhone ? <p className="mt-4 font-bold text-purple-700">WhatsApp: {bootstrap.settings.whatsappPhone}</p> : null}
+        <section className="min-h-[calc(100vh-4rem)] bg-neutral-50 p-6 lg:p-12">
+          <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+              <Store className="mb-5 h-10 w-10 text-purple-600" />
+              <h1 className="mb-3 text-3xl font-bold uppercase tracking-tight">{bootstrap.settings.publicName}</h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-neutral-500">{bootstrap.settings.description}</p>
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                {bootstrap.settings.whatsappPhone ? (
+                  <a href={`https://wa.me/${bootstrap.settings.whatsappPhone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="rounded-xl border border-purple-200 bg-purple-50 p-4 font-bold text-purple-700">
+                    WhatsApp<br /><span className="text-sm font-medium text-purple-600">{bootstrap.settings.whatsappPhone}</span>
+                  </a>
+                ) : null}
+                {bootstrap.settings.instagramUrl ? (
+                  <a href={bootstrap.settings.instagramUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 font-bold text-neutral-900">
+                    Instagram<br /><span className="text-sm font-medium text-neutral-500">Abrir perfil</span>
+                  </a>
+                ) : null}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+              <h2 className="mb-5 text-xl font-bold uppercase tracking-tight">Atendimento</h2>
+              <div className="grid gap-4">
+                <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                  <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">Endereco</span>
+                  <p className="mt-1 text-sm font-medium text-neutral-700">{bootstrap.settings.address || 'Endereco nao informado'}</p>
+                </div>
+                <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                  <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">Horario</span>
+                  <p className="mt-1 text-sm font-medium text-neutral-700">{bootstrap.settings.businessHours || 'Horario nao informado'}</p>
+                </div>
+              </div>
+              <button onClick={() => goToTab('catalogo')} className="mt-6 w-full rounded-xl bg-gradient-to-r from-purple-800 to-purple-500 px-6 py-3.5 text-sm font-bold uppercase tracking-tight text-white shadow-md shadow-purple-500/20">
+                Ver catalogo
+              </button>
+            </div>
           </div>
         </section>
       ) : null}

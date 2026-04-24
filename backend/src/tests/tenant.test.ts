@@ -230,4 +230,155 @@ describe('multi-tenant foundation', () => {
 
     expect(response.body.error.code).toBe('INVALID_JSON');
   });
+
+  it('lets the client update public appearance settings used by the public catalog', async () => {
+    const agent = request.agent(app);
+    await agent
+      .post('/api/auth/client-login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(200);
+
+    const settingsResponse = await agent
+      .put('/api/client/settings/public')
+      .set('X-Client-Request', 'true')
+      .send({
+        heroTitle: 'PulseFit Catalogo Premium',
+        heroSubtitle: 'Treino, performance e estilo em uma loja atualizada.',
+        whatsappPhone: '5571888888888',
+        primaryColor: '#7C3AED'
+      })
+      .expect(200);
+
+    expect(settingsResponse.body.data.heroTitle).toBe('PulseFit Catalogo Premium');
+
+    const publicResponse = await request(app).get('/api/public/pulsefit/bootstrap').expect(200);
+    expect(publicResponse.body.data.hero.title).toBe('PulseFit Catalogo Premium');
+    expect(publicResponse.body.data.settings.whatsappPhone).toBe('5571888888888');
+  });
+
+  it('lets the client update order status for its own orders', async () => {
+    const orderResponse = await request(app)
+      .post('/api/public/pulsefit/orders')
+      .send({
+        customer: {
+          fullName: 'Cliente Status',
+          phone: '71911111111',
+          fulfillmentType: 'pickup',
+          paymentMethod: 'cash'
+        },
+        items: [{ productId: 'prod-whey-baunilha', quantity: 1 }]
+      })
+      .expect(201);
+
+    const agent = request.agent(app);
+    await agent
+      .post('/api/auth/client-login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(200);
+
+    const updateResponse = await agent
+      .patch(`/api/client/orders/${orderResponse.body.data.id}/status`)
+      .set('X-Client-Request', 'true')
+      .send({ status: 'confirmed' })
+      .expect(200);
+
+    expect(updateResponse.body.data.status).toBe('confirmed');
+  });
+
+  it('enforces plan product limits on client product creation', async () => {
+    const master = request.agent(app);
+    await master
+      .post('/api/auth/master-login')
+      .send({ email: 'master@catalogos.local', password: 'Master@123' })
+      .expect(200);
+
+    const planResponse = await master
+      .post('/api/master/plans')
+      .set('X-Master-Request', 'true')
+      .send({
+        name: 'Tiny Test',
+        code: 'tiny-test',
+        priceMonthly: 9.9,
+        productLimit: 3,
+        userLimit: 1,
+        storageLimitMb: 50
+      })
+      .expect(201);
+
+    await master
+      .patch('/api/master/companies/company-pulsefit/plan')
+      .set('X-Master-Request', 'true')
+      .send({ planCode: planResponse.body.data.code })
+      .expect(200);
+
+    const client = request.agent(app);
+    await client
+      .post('/api/auth/client-login')
+      .send({ email: 'owner@pulsefit.local', password: 'PulseFit@123' })
+      .expect(200);
+
+    await client
+      .post('/api/client/products')
+      .set('X-Client-Request', 'true')
+      .send({
+        categoryId: 'cat-tops',
+        title: 'Produto acima do limite',
+        slug: 'produto-acima-limite',
+        price: 10,
+        stockQuantity: 1
+      })
+      .expect(403);
+
+    await master
+      .patch('/api/master/companies/company-pulsefit/plan')
+      .set('X-Master-Request', 'true')
+      .send({ planCode: 'silver' })
+      .expect(200);
+  });
+
+  it('lets master operate company status, manual invoices and audit logs', async () => {
+    const master = request.agent(app);
+    await master
+      .post('/api/auth/master-login')
+      .send({ email: 'master@catalogos.local', password: 'Master@123' })
+      .expect(200);
+
+    const invoiceResponse = await master
+      .post('/api/master/billing/invoices')
+      .set('X-Master-Request', 'true')
+      .send({
+        companyId: 'company-pulsefit',
+        amount: 149.9,
+        dueDate: '2026-05-10'
+      })
+      .expect(201);
+
+    const paidResponse = await master
+      .patch(`/api/master/billing/invoices/${invoiceResponse.body.data.id}/status`)
+      .set('X-Master-Request', 'true')
+      .send({ status: 'paid' })
+      .expect(200);
+
+    expect(paidResponse.body.data.status).toBe('paid');
+    expect(paidResponse.body.data.paidAt).toBeTruthy();
+
+    await master
+      .patch('/api/master/companies/company-pulsefit/status')
+      .set('X-Master-Request', 'true')
+      .send({ status: 'suspended' })
+      .expect(200);
+
+    await request(app).get('/api/public/pulsefit/bootstrap').expect(404);
+
+    await master
+      .patch('/api/master/companies/company-pulsefit/status')
+      .set('X-Master-Request', 'true')
+      .send({ status: 'active' })
+      .expect(200);
+
+    const auditResponse = await master.get('/api/master/audit-logs').expect(200);
+    const actions = auditResponse.body.data.map((row: { action: string }) => row.action);
+    expect(actions).toContain('invoice.status_updated');
+    expect(actions).toContain('company.status_updated');
+  });
 });

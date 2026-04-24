@@ -5,17 +5,27 @@ import { ApiError } from '../lib/http.js';
 import {
   type CatalogRepository,
   type Category,
+  type AuditLog,
   type ClientRole,
+  type ClientBillingSummary,
+  type ClientUsage,
   type Company,
+  type Invoice,
+  type InvoiceStatus,
   type MasterUser,
+  type ModuleWriteInput,
   type Order,
   type OrderItem,
+  type Plan,
+  type PlanWriteInput,
+  type PlatformModule,
   type Product,
   type ProductWriteInput,
   type ProductVariant,
   type PublicBootstrap,
   type PublicSettings,
   type CategoryWriteInput,
+  type Subscription,
   type TenantContextData,
   type User
 } from '../store/data.js';
@@ -57,11 +67,66 @@ function mapCompany(row: Row): Company {
   };
 }
 
+function mapPlan(row: Row): Plan {
+  return {
+    id: getString(row, 'id'),
+    name: getString(row, 'name'),
+    code: getString(row, 'code'),
+    description: getString(row, 'description'),
+    priceMonthly: getNumber(row, 'price_monthly'),
+    productLimit: getNumber(row, 'product_limit'),
+    userLimit: getNumber(row, 'user_limit'),
+    storageLimitMb: getNumber(row, 'storage_limit_mb'),
+    isActive: getBoolean(row, 'is_active'),
+    sortOrder: getNumber(row, 'sort_order')
+  };
+}
+
+function mapSubscription(row: Row): Subscription {
+  return {
+    id: getString(row, 'id'),
+    companyId: getString(row, 'company_id'),
+    planCode: getString((row.plans as Row | null) ?? {}, 'code') || getString(row, 'plan_code') || 'bronze',
+    status: getString(row, 'status') as Subscription['status'],
+    billingCycle: getString(row, 'billing_cycle') as Subscription['billingCycle'],
+    currentPeriodEnd: getString(row, 'current_period_end') || undefined,
+    trialEndsAt: getString(row, 'trial_ends_at') || undefined
+  };
+}
+
+function mapInvoice(row: Row, companyName?: string): Invoice {
+  return {
+    id: getString(row, 'id'),
+    companyId: getString(row, 'company_id'),
+    subscriptionId: getString(row, 'subscription_id') || undefined,
+    amount: getNumber(row, 'amount'),
+    status: getString(row, 'status') as Invoice['status'],
+    dueDate: getString(row, 'due_date') || undefined,
+    paidAt: getString(row, 'paid_at') || undefined,
+    paymentUrl: getString(row, 'payment_url') || undefined,
+    createdAt: getString(row, 'created_at'),
+    companyName
+  };
+}
+
+function mapModule(row: Row): PlatformModule {
+  return {
+    id: getString(row, 'id'),
+    code: getString(row, 'code'),
+    name: getString(row, 'name'),
+    description: getString(row, 'description'),
+    priceMonthly: getNumber(row, 'price_monthly'),
+    isActive: getBoolean(row, 'is_active')
+  };
+}
+
 function mapSettings(row: Row): PublicSettings {
   return {
     companyId: getString(row, 'company_id'),
     publicName: getString(row, 'public_name'),
     description: getString(row, 'description'),
+    logoUrl: getString(row, 'logo_url') || undefined,
+    coverUrl: getString(row, 'cover_url') || undefined,
     heroTitle: getString(row, 'hero_title'),
     heroSubtitle: getString(row, 'hero_subtitle'),
     heroBadge: getString(row, 'hero_badge'),
@@ -70,7 +135,11 @@ function mapSettings(row: Row): PublicSettings {
     secondaryColor: getString(row, 'secondary_color') || '#0F172A',
     accentColor: getString(row, 'accent_color') || '#F8FAFC',
     instagramUrl: getString(row, 'instagram_url') || undefined,
-    whatsappPhone: getString(row, 'whatsapp_phone') || undefined
+    whatsappPhone: getString(row, 'whatsapp_phone') || undefined,
+    address: getString(row, 'address') || undefined,
+    businessHours: getString(row, 'business_hours') || undefined,
+    seoTitle: getString(row, 'seo_title') || undefined,
+    seoDescription: getString(row, 'seo_description') || undefined
   };
 }
 
@@ -181,6 +250,7 @@ export class SupabaseCatalogRepository implements CatalogRepository {
 
     const userId = randomUUID();
     const companyId = randomUUID();
+    const bronzePlan = await this.getPlanByCode('bronze');
 
     const { error: userError } = await this.client.from('users').insert({
       id: userId,
@@ -197,7 +267,8 @@ export class SupabaseCatalogRepository implements CatalogRepository {
         owner_user_id: userId,
         name: input.companyName,
         slug: input.companySlug,
-        status: 'trial'
+        status: 'trial',
+        plan_id: bronzePlan.id
       });
       if (companyError) throw companyError;
 
@@ -222,6 +293,16 @@ export class SupabaseCatalogRepository implements CatalogRepository {
         accent_color: '#F8FAFC'
       });
       if (settingsError) throw settingsError;
+
+      const { error: subscriptionError } = await this.client.from('subscriptions').insert({
+        company_id: companyId,
+        plan_id: bronzePlan.id,
+        status: 'trial',
+        billing_cycle: 'monthly',
+        gateway: 'manual',
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      });
+      if (subscriptionError) throw subscriptionError;
     } catch (error) {
       await this.client.from('users').delete().eq('id', userId);
       throw error;
@@ -277,6 +358,10 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     const companies = await this.getLoginCompanies(userId);
     const tenant = companies[0];
     if (!tenant) throw new ApiError(403, 'TENANT_REQUIRED', 'Tenant access required');
+    const company = await this.getCompanyById(tenant.id);
+    if (company.status === 'suspended' || company.status === 'cancelled') {
+      throw new ApiError(403, 'BILLING_PAST_DUE', 'Company is not active');
+    }
     return tenant;
   }
 
@@ -437,6 +522,85 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     };
   }
 
+  async getClientUsage(companyId: string): Promise<ClientUsage> {
+    const company = await this.getCompanyById(companyId);
+    const plan = await this.getPlanByCode(company.planCode);
+    const [{ count: productCount, error: productError }, { count: userCount, error: userError }] = await Promise.all([
+      this.client.from('products').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+      this.client.from('company_users').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('is_active', true)
+    ]);
+    if (productError) throw productError;
+    if (userError) throw userError;
+    return {
+      products: { used: productCount ?? 0, limit: plan.productLimit },
+      users: { used: userCount ?? 0, limit: plan.userLimit },
+      storage: { usedMb: 0, limitMb: plan.storageLimitMb },
+      plan
+    };
+  }
+
+  async getClientPublicSettings(companyId: string): Promise<PublicSettings> {
+    const { data, error } = await this.client.from('company_public_settings').select('*').eq('company_id', companyId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Public settings not found');
+    return mapSettings(data);
+  }
+
+  async updateClientPublicSettings(companyId: string, input: Partial<PublicSettings>): Promise<PublicSettings> {
+    const patch: Row = {};
+    const mapping: Record<string, string> = {
+      publicName: 'public_name',
+      description: 'description',
+      logoUrl: 'logo_url',
+      coverUrl: 'cover_url',
+      heroTitle: 'hero_title',
+      heroSubtitle: 'hero_subtitle',
+      heroBadge: 'hero_badge',
+      heroButtonLabel: 'hero_button_label',
+      primaryColor: 'primary_color',
+      secondaryColor: 'secondary_color',
+      accentColor: 'accent_color',
+      instagramUrl: 'instagram_url',
+      whatsappPhone: 'whatsapp_phone',
+      address: 'address',
+      businessHours: 'business_hours',
+      seoTitle: 'seo_title',
+      seoDescription: 'seo_description'
+    };
+    for (const [key, column] of Object.entries(mapping)) {
+      const value = input[key as keyof PublicSettings];
+      if (typeof value === 'string') patch[column] = value;
+    }
+    const { data, error } = await this.client.from('company_public_settings').update(patch).eq('company_id', companyId).select('*').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Public settings not found');
+    return mapSettings(data);
+  }
+
+  async getClientBillingSubscription(companyId: string): Promise<ClientBillingSummary> {
+    const subscription = await this.getSubscriptionForCompany(companyId);
+    const plan = await this.getPlanByCode(subscription.planCode);
+    return {
+      subscription,
+      plan,
+      openInvoices: (await this.listClientInvoices(companyId)).filter((item) => item.status === 'open' || item.status === 'overdue')
+    };
+  }
+
+  async listClientInvoices(companyId: string): Promise<Invoice[]> {
+    const { data, error } = await this.client.from('invoices').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => mapInvoice(row));
+  }
+
+  async listClientModules(companyId: string): Promise<Array<PlatformModule & { enabled: boolean }>> {
+    const [modules, enabled] = await Promise.all([
+      this.listPlatformModules(),
+      this.listEnabledModuleCodes(companyId)
+    ]);
+    return modules.filter((item) => item.isActive).map((item) => ({ ...item, enabled: enabled.includes(item.code) }));
+  }
+
   async listClientProducts(companyId: string): Promise<Product[]> {
     const { data, error } = await this.client.from('products').select('*').eq('company_id', companyId).order('created_at');
     if (error) throw error;
@@ -444,6 +608,10 @@ export class SupabaseCatalogRepository implements CatalogRepository {
   }
 
   async createClientProduct(companyId: string, input: ProductWriteInput): Promise<Product> {
+    const usage = await this.getClientUsage(companyId);
+    if (usage.products.used >= usage.products.limit) {
+      throw new ApiError(403, 'PLAN_LIMIT_REACHED', 'Product limit reached for current plan');
+    }
     await this.assertCategoryBelongsToCompany(companyId, input.categoryId);
     const { data, error } = await this.client
       .from('products')
@@ -613,6 +781,19 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     return (data ?? []).map((row: Row) => mapOrder(row));
   }
 
+  async updateClientOrderStatus(companyId: string, orderId: string, status: Order['status']): Promise<Order> {
+    const { data, error } = await this.client
+      .from('orders')
+      .update({ status })
+      .eq('company_id', companyId)
+      .eq('id', orderId)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Order not found');
+    return mapOrder(data);
+  }
+
   async getMasterDashboard(): Promise<{
     companiesTotal: number;
     activeCompanies: number;
@@ -638,6 +819,274 @@ export class SupabaseCatalogRepository implements CatalogRepository {
         return { ...company, productsTotal: products.length, ordersTotal: orders.length };
       })
     );
+  }
+
+  async getMasterCompany(companyId: string): Promise<Company & { productsTotal: number; ordersTotal: number; subscription?: Subscription; settings?: PublicSettings }> {
+    const company = await this.getCompanyById(companyId);
+    const [products, orders, subscription, settings] = await Promise.all([
+      this.listClientProducts(company.id),
+      this.listClientOrders(company.id),
+      this.getSubscriptionForCompany(company.id).catch(() => undefined),
+      this.getClientPublicSettings(company.id).catch(() => undefined)
+    ]);
+    return { ...company, productsTotal: products.length, ordersTotal: orders.length, subscription, settings };
+  }
+
+  async updateMasterCompany(companyId: string, input: Partial<Pick<Company, 'name' | 'slug' | 'status' | 'planCode'>>, actorUserId?: string): Promise<Company> {
+    const patch: Row = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.slug !== undefined) patch.slug = input.slug;
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.planCode !== undefined) {
+      const plan = await this.getPlanByCode(input.planCode);
+      patch.plan_id = plan.id;
+    }
+    const previous = await this.getCompanyById(companyId);
+    const { data, error } = await this.client.from('companies').update(patch).eq('id', companyId).select('*, plans(code)').maybeSingle();
+    if (error) this.handleConstraintError(error, 'Company slug already exists');
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Company not found');
+    if (input.planCode !== undefined) {
+      const plan = await this.getPlanByCode(input.planCode);
+      await this.client.from('subscriptions').update({ plan_id: plan.id }).eq('company_id', companyId);
+    }
+    if (input.status === 'suspended') await this.client.from('subscriptions').update({ status: 'suspended' }).eq('company_id', companyId);
+    if (input.status === 'active') await this.client.from('subscriptions').update({ status: 'active' }).eq('company_id', companyId).in('status', ['suspended', 'past_due']);
+    const company = { ...mapCompany(data), planCode: getString((data.plans as Row | null) ?? {}, 'code') || input.planCode || previous.planCode };
+    await this.createAuditLog({
+      companyId,
+      masterUserId: actorUserId,
+      action: input.status && input.status !== previous.status ? 'company.status_updated' : input.planCode && input.planCode !== previous.planCode ? 'company.plan_updated' : 'company.updated',
+      entity: 'company',
+      entityId: companyId,
+      metadata: { previous, next: company }
+    });
+    return company;
+  }
+
+  async listPlans(): Promise<Plan[]> {
+    const { data, error } = await this.client.from('plans').select('*').order('sort_order');
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => mapPlan(row));
+  }
+
+  async createPlan(input: PlanWriteInput, actorUserId?: string): Promise<Plan> {
+    const { data, error } = await this.client
+      .from('plans')
+      .insert({
+        name: input.name,
+        code: input.code,
+        description: input.description ?? '',
+        price_monthly: input.priceMonthly,
+        product_limit: input.productLimit,
+        user_limit: input.userLimit,
+        storage_limit_mb: input.storageLimitMb,
+        is_active: input.isActive ?? true,
+        sort_order: input.sortOrder ?? 0
+      })
+      .select('*')
+      .single();
+    if (error) this.handleConstraintError(error, 'Plan code already exists');
+    const plan = mapPlan(data);
+    await this.createAuditLog({ masterUserId: actorUserId, action: 'plan.created', entity: 'plan', entityId: plan.id, metadata: { plan } });
+    return plan;
+  }
+
+  async updatePlan(planId: string, input: Partial<PlanWriteInput>, actorUserId?: string): Promise<Plan> {
+    const patch: Row = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.code !== undefined) patch.code = input.code;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.priceMonthly !== undefined) patch.price_monthly = input.priceMonthly;
+    if (input.productLimit !== undefined) patch.product_limit = input.productLimit;
+    if (input.userLimit !== undefined) patch.user_limit = input.userLimit;
+    if (input.storageLimitMb !== undefined) patch.storage_limit_mb = input.storageLimitMb;
+    if (input.isActive !== undefined) patch.is_active = input.isActive;
+    if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
+    const { data, error } = await this.client.from('plans').update(patch).or(`id.eq.${planId},code.eq.${planId}`).select('*').maybeSingle();
+    if (error) this.handleConstraintError(error, 'Plan code already exists');
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Plan not found');
+    const plan = mapPlan(data);
+    await this.createAuditLog({ masterUserId: actorUserId, action: 'plan.updated', entity: 'plan', entityId: plan.id, metadata: { plan } });
+    return plan;
+  }
+
+  async listPlatformModules(): Promise<PlatformModule[]> {
+    const { data, error } = await this.client.from('modules').select('*').order('created_at');
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => mapModule(row));
+  }
+
+  async createPlatformModule(input: ModuleWriteInput, actorUserId?: string): Promise<PlatformModule> {
+    const { data, error } = await this.client
+      .from('modules')
+      .insert({
+        code: input.code,
+        name: input.name,
+        description: input.description ?? '',
+        price_monthly: input.priceMonthly,
+        is_active: input.isActive ?? true
+      })
+      .select('*')
+      .single();
+    if (error) this.handleConstraintError(error, 'Module code already exists');
+    const moduleItem = mapModule(data);
+    await this.createAuditLog({ masterUserId: actorUserId, action: 'module.created', entity: 'module', entityId: moduleItem.id, metadata: { module: moduleItem } });
+    return moduleItem;
+  }
+
+  async updatePlatformModule(moduleId: string, input: Partial<ModuleWriteInput>, actorUserId?: string): Promise<PlatformModule> {
+    const patch: Row = {};
+    if (input.code !== undefined) patch.code = input.code;
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.priceMonthly !== undefined) patch.price_monthly = input.priceMonthly;
+    if (input.isActive !== undefined) patch.is_active = input.isActive;
+    const { data, error } = await this.client.from('modules').update(patch).or(`id.eq.${moduleId},code.eq.${moduleId}`).select('*').maybeSingle();
+    if (error) this.handleConstraintError(error, 'Module code already exists');
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Module not found');
+    const moduleItem = mapModule(data);
+    await this.createAuditLog({ masterUserId: actorUserId, action: 'module.updated', entity: 'module', entityId: moduleItem.id, metadata: { module: moduleItem } });
+    return moduleItem;
+  }
+
+  async listMasterSubscriptions(): Promise<Array<Subscription & { companyName: string }>> {
+    const { data, error } = await this.client.from('subscriptions').select('*, plans(code), companies(name)').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => ({ ...mapSubscription(row), companyName: getString((row.companies as Row | null) ?? {}, 'name') }));
+  }
+
+  async listMasterInvoices(): Promise<Invoice[]> {
+    const { data, error } = await this.client.from('invoices').select('*, companies(name)').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => mapInvoice(row, getString((row.companies as Row | null) ?? {}, 'name')));
+  }
+
+  async createMasterInvoice(input: { companyId: string; amount: number; dueDate?: string; paymentUrl?: string }, actorUserId?: string): Promise<Invoice> {
+    const company = await this.getCompanyById(input.companyId);
+    const subscription = await this.getSubscriptionForCompany(company.id);
+    const { data, error } = await this.client
+      .from('invoices')
+      .insert({
+        company_id: company.id,
+        subscription_id: subscription.id,
+        amount: input.amount,
+        status: 'open',
+        due_date: input.dueDate,
+        payment_url: input.paymentUrl
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    const invoice = mapInvoice(data, company.name);
+    await this.createAuditLog({ companyId: company.id, masterUserId: actorUserId, action: 'invoice.created', entity: 'invoice', entityId: invoice.id, metadata: { invoice } });
+    return invoice;
+  }
+
+  async updateMasterInvoiceStatus(invoiceId: string, status: InvoiceStatus, actorUserId?: string): Promise<Invoice> {
+    const patch: Row = { status };
+    if (status === 'paid') patch.paid_at = new Date().toISOString();
+    const { data, error } = await this.client.from('invoices').update(patch).eq('id', invoiceId).select('*, companies(name)').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Invoice not found');
+    if (status === 'paid') {
+      await this.client.from('subscriptions').update({ status: 'active' }).eq('company_id', getString(data, 'company_id'));
+      await this.client.from('companies').update({ status: 'active' }).eq('id', getString(data, 'company_id')).eq('status', 'suspended');
+    }
+    if (status === 'overdue') await this.client.from('subscriptions').update({ status: 'past_due' }).eq('company_id', getString(data, 'company_id'));
+    const invoice = mapInvoice(data, getString((data.companies as Row | null) ?? {}, 'name'));
+    await this.createAuditLog({ companyId: invoice.companyId, masterUserId: actorUserId, action: 'invoice.status_updated', entity: 'invoice', entityId: invoice.id, metadata: { status } });
+    return invoice;
+  }
+
+  async listMasterOrders(): Promise<Array<Order & { companyName: string }>> {
+    const { data, error } = await this.client.from('orders').select('*, companies(name)').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => ({ ...mapOrder(row), companyName: getString((row.companies as Row | null) ?? {}, 'name') }));
+  }
+
+  async listAuditLogs(): Promise<AuditLog[]> {
+    const { data, error } = await this.client.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) throw error;
+    return (data ?? []).map((row: Row) => ({
+      id: getString(row, 'id'),
+      companyId: getString(row, 'company_id') || undefined,
+      userId: getString(row, 'user_id') || undefined,
+      masterUserId: getString(row, 'master_user_id') || undefined,
+      action: getString(row, 'action'),
+      entity: getString(row, 'entity'),
+      entityId: getString(row, 'entity_id') || undefined,
+      metadata: (row.metadata as Record<string, unknown>) ?? {},
+      createdAt: getString(row, 'created_at')
+    }));
+  }
+
+  private async getCompanyById(companyId: string): Promise<Company> {
+    const { data, error } = await this.client.from('companies').select('*, plans(code)').eq('id', companyId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Company not found');
+    return { ...mapCompany(data), planCode: getString((data.plans as Row | null) ?? {}, 'code') || 'bronze' };
+  }
+
+  private async getPlanByCode(planCode: string): Promise<Plan> {
+    const { data, error } = await this.client.from('plans').select('*').eq('code', planCode).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(422, 'VALIDATION_ERROR', 'Plan not found');
+    return mapPlan(data);
+  }
+
+  private async getSubscriptionForCompany(companyId: string): Promise<Subscription> {
+    const { data, error } = await this.client
+      .from('subscriptions')
+      .select('*, plans(code)')
+      .eq('company_id', companyId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return mapSubscription(data);
+    const company = await this.getCompanyById(companyId);
+    const plan = await this.getPlanByCode(company.planCode);
+    const { data: created, error: createError } = await this.client
+      .from('subscriptions')
+      .insert({
+        company_id: companyId,
+        plan_id: plan.id,
+        status: company.status === 'trial' ? 'trial' : 'active',
+        billing_cycle: 'monthly',
+        gateway: 'manual'
+      })
+      .select('*, plans(code)')
+      .single();
+    if (createError) throw createError;
+    return mapSubscription(created);
+  }
+
+  private async listEnabledModuleCodes(companyId: string): Promise<string[]> {
+    const { data, error } = await this.client.from('company_modules').select('module_code').eq('company_id', companyId).eq('status', 'active');
+    if (error) {
+      if (String((error as { code?: string }).code) === '42P01') return [];
+      throw error;
+    }
+    return (data ?? []).map((row: Row) => getString(row, 'module_code'));
+  }
+
+  private async createAuditLog(input: {
+    companyId?: string;
+    userId?: string;
+    masterUserId?: string;
+    action: string;
+    entity: string;
+    entityId?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const { error } = await this.client.from('audit_logs').insert({
+      company_id: input.companyId,
+      user_id: input.userId,
+      master_user_id: input.masterUserId,
+      action: input.action,
+      entity: input.entity,
+      entity_id: input.entityId,
+      metadata: input.metadata ?? {}
+    });
+    if (error) throw error;
   }
 
   private async getPublicCompanyBySlug(slug: string): Promise<Company> {
