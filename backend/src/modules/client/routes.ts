@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler, ok } from '../../lib/http.js';
 import { requireAuth, requireRole, requireTenant } from '../../middleware/auth.js';
-import { db } from '../../store/data.js';
+import { getRepository } from '../../repositories/index.js';
 
 export const clientRouter = Router();
 
@@ -11,16 +11,10 @@ clientRouter.get(
   '/dashboard',
   asyncHandler(async (req, res) => {
     const companyId = req.tenant!.id;
-    const products = db.products.filter((item) => item.companyId === companyId);
-    const orders = db.orders.filter((item) => item.companyId === companyId);
+    const metrics = await getRepository().getClientDashboard(companyId);
     ok(res, {
       tenant: req.tenant,
-      metrics: {
-        productsTotal: products.length,
-        productsLive: products.filter((item) => item.isActive && item.catalogStatus === 'live').length,
-        ordersTotal: orders.length,
-        revenueTotal: Number(orders.reduce((sum, item) => sum + item.totalAmount, 0).toFixed(2))
-      }
+      metrics
     });
   })
 );
@@ -30,7 +24,7 @@ clientRouter.get(
   asyncHandler(async (req, res) => {
     ok(
       res,
-      db.products.filter((item) => item.companyId === req.tenant!.id)
+      await getRepository().listClientProducts(req.tenant!.id)
     );
   })
 );
@@ -45,12 +39,7 @@ clientRouter.patch(
       res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'stockQuantity must be >= 0' } });
       return;
     }
-    const updated = db.products
-      .filter((item) => item.companyId === req.tenant!.id && ids.includes(item.id))
-      .map((item) => {
-        item.stockQuantity = stockQuantity;
-        return item;
-      });
+    const updated = await getRepository().bulkUpdateProductStock(req.tenant!.id, ids, stockQuantity);
     ok(res, { updatedCount: updated.length, products: updated });
   })
 );
@@ -60,7 +49,7 @@ clientRouter.get(
   asyncHandler(async (req, res) => {
     ok(
       res,
-      db.categories.filter((item) => item.companyId === req.tenant!.id)
+      await getRepository().listClientCategories(req.tenant!.id)
     );
   })
 );
@@ -70,7 +59,7 @@ clientRouter.get(
   asyncHandler(async (req, res) => {
     ok(
       res,
-      db.orders.filter((item) => item.companyId === req.tenant!.id)
+      await getRepository().listClientOrders(req.tenant!.id)
     );
   })
 );

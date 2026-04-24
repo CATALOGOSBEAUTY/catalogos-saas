@@ -4,7 +4,7 @@ import { createSession, hashPassword, verifyPassword } from '../../lib/auth.js';
 import { ApiError, asyncHandler, created, noContent, ok, requireString } from '../../lib/http.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { loginRateLimit } from '../../middleware/security.js';
-import { createClientAccount, db, masterForUser, tenantForUser } from '../../store/data.js';
+import { getRepository } from '../../repositories/index.js';
 
 export const authRouter = Router();
 
@@ -38,7 +38,7 @@ authRouter.post(
     if (!companySlug) throw new ApiError(422, 'VALIDATION_ERROR', 'companySlug is invalid');
 
     const passwordHash = await hashPassword(password);
-    const result = createClientAccount({ name, email, passwordHash, companyName, companySlug });
+    const result = await getRepository().createClientAccount({ name, email, passwordHash, companyName, companySlug });
     const token = createSession({ sub: result.user.id, email: result.user.email, type: 'client' });
     setSessionCookie(res, token);
     created(res, {
@@ -55,25 +55,20 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const email = requireString(req.body?.email, 'email').toLowerCase();
     const password = requireString(req.body?.password, 'password');
-    const user = db.users.find((item) => item.email.toLowerCase() === email);
+    const repository = getRepository();
+    const user = await repository.findUserByEmail(email);
     if (!user || user.status !== 'active') {
       throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
     }
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid credentials');
 
-    const master = db.masterUsers.find((item) => item.userId === user.id && item.isActive);
+    const master = await repository.getMasterForUser(user.id);
     const type = master ? 'master' : 'client';
     const token = createSession({ sub: user.id, email: user.email, type });
     setSessionCookie(res, token);
 
-    const companies = db.companyUsers
-      .filter((item) => item.userId === user.id && item.isActive)
-      .map((companyUser) => {
-        const company = db.companies.find((item) => item.id === companyUser.companyId);
-        return company ? { id: company.id, slug: company.slug, name: company.name, role: companyUser.role } : null;
-      })
-      .filter(Boolean);
+    const companies = await repository.getLoginCompanies(user.id);
 
     ok(res, {
       user: publicUser(user),
@@ -92,18 +87,19 @@ authRouter.get(
   '/me',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const user = db.users.find((item) => item.id === req.user?.id);
+    const repository = getRepository();
+    const user = req.user ? await repository.findUserById(req.user.id) : null;
     if (!user) throw new ApiError(401, 'AUTH_REQUIRED', 'User not found');
 
     let tenant = null;
     let master = null;
     try {
-      tenant = tenantForUser(user.id);
+      tenant = await repository.getTenantForUser(user.id);
     } catch {
       tenant = null;
     }
     try {
-      master = masterForUser(user.id);
+      master = await repository.getMasterForUser(user.id);
     } catch {
       master = null;
     }

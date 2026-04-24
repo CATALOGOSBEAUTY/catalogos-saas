@@ -178,6 +178,7 @@ create table public.product_images (
   name text,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
+  unique(company_id, product_id, url),
   foreign key (company_id, product_id) references public.products(company_id, id) on delete cascade
 );
 

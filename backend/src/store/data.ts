@@ -125,6 +125,80 @@ export interface AppStore {
   orders: Order[];
 }
 
+export interface PublicBootstrap {
+  company: {
+    id: string;
+    slug: string;
+    name: string;
+    status: CompanyStatus;
+  };
+  theme: {
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+  };
+  hero: {
+    title: string;
+    subtitle: string;
+    badge: string;
+    buttonLabel: string;
+  };
+  settings: PublicSettings;
+  categories: Category[];
+  products: Array<Product & { variants: ProductVariant[] }>;
+}
+
+export interface TenantContextData {
+  id: string;
+  slug: string;
+  name: string;
+  role: ClientRole;
+}
+
+export interface CatalogRepository {
+  findUserByEmail(email: string): Promise<User | null>;
+  findUserById(userId: string): Promise<User | null>;
+  createClientAccount(input: {
+    name: string;
+    email: string;
+    passwordHash: string;
+    companyName: string;
+    companySlug: string;
+  }): Promise<{ user: User; company: Company }>;
+  getLoginCompanies(userId: string): Promise<Array<{ id: string; slug: string; name: string; role: ClientRole }>>;
+  getMasterForUser(userId: string): Promise<MasterUser | null>;
+  getTenantForUser(userId: string): Promise<TenantContextData>;
+  getPublicBootstrap(companySlug: string): Promise<PublicBootstrap>;
+  getProductBySlug(companySlug: string, productSlug: string): Promise<Product & { variants: ProductVariant[] }>;
+  createPublicOrder(input: {
+    companySlug: string;
+    customer: {
+      fullName: string;
+      phone?: string;
+      fulfillmentType: 'delivery' | 'pickup';
+      paymentMethod: 'cash' | 'pix' | 'card' | 'online';
+    };
+    items: Array<{ productId: string; variantId?: string | null; quantity: number }>;
+  }): Promise<Order>;
+  getClientDashboard(companyId: string): Promise<{
+    productsTotal: number;
+    productsLive: number;
+    ordersTotal: number;
+    revenueTotal: number;
+  }>;
+  listClientProducts(companyId: string): Promise<Product[]>;
+  bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]>;
+  listClientCategories(companyId: string): Promise<Category[]>;
+  listClientOrders(companyId: string): Promise<Order[]>;
+  getMasterDashboard(): Promise<{
+    companiesTotal: number;
+    activeCompanies: number;
+    ordersTotal: number;
+    revenueTotal: number;
+  }>;
+  listMasterCompanies(): Promise<Array<Company & { productsTotal: number; ordersTotal: number }>>;
+}
+
 const ownerPasswordHash = bcrypt.hashSync('PulseFit@123', 12);
 const masterPasswordHash = bcrypt.hashSync('Master@123', 12);
 
@@ -295,7 +369,7 @@ export function publicCompanyBySlug(slug: string): Company {
   return company;
 }
 
-export function getPublicBootstrap(companySlug: string) {
+export function getPublicBootstrap(companySlug: string): PublicBootstrap {
   const company = publicCompanyBySlug(companySlug);
   const settings = db.publicSettings.find((item) => item.companyId === company.id);
   if (!settings) throw new ApiError(404, 'NOT_FOUND', 'Public settings not found');
@@ -335,7 +409,7 @@ export function getPublicBootstrap(companySlug: string) {
   };
 }
 
-export function getProductBySlug(companySlug: string, productSlug: string) {
+export function getProductBySlug(companySlug: string, productSlug: string): Product & { variants: ProductVariant[] } {
   const company = publicCompanyBySlug(companySlug);
   const product = db.products.find(
     (item) =>
@@ -434,7 +508,7 @@ export function createPublicOrder(input: {
   return order;
 }
 
-export function tenantForUser(userId: string) {
+export function tenantForUser(userId: string): TenantContextData {
   const companyUser = db.companyUsers.find((item) => item.userId === userId && item.isActive);
   if (!companyUser) throw new ApiError(403, 'TENANT_REQUIRED', 'Tenant access required');
   const company = db.companies.find((item) => item.id === companyUser.companyId);
@@ -502,4 +576,126 @@ export function createClientAccount(input: {
   });
 
   return { user, company };
+}
+
+export class MemoryCatalogRepository implements CatalogRepository {
+  async findUserByEmail(email: string): Promise<User | null> {
+    return db.users.find((item) => item.email.toLowerCase() === email.toLowerCase()) ?? null;
+  }
+
+  async findUserById(userId: string): Promise<User | null> {
+    return db.users.find((item) => item.id === userId) ?? null;
+  }
+
+  async createClientAccount(input: {
+    name: string;
+    email: string;
+    passwordHash: string;
+    companyName: string;
+    companySlug: string;
+  }): Promise<{ user: User; company: Company }> {
+    return createClientAccount(input);
+  }
+
+  async getLoginCompanies(userId: string): Promise<Array<{ id: string; slug: string; name: string; role: ClientRole }>> {
+    return db.companyUsers
+      .filter((item) => item.userId === userId && item.isActive)
+      .map((companyUser) => {
+        const company = db.companies.find((item) => item.id === companyUser.companyId);
+        return company ? { id: company.id, slug: company.slug, name: company.name, role: companyUser.role } : null;
+      })
+      .filter((item): item is { id: string; slug: string; name: string; role: ClientRole } => Boolean(item));
+  }
+
+  async getMasterForUser(userId: string): Promise<MasterUser | null> {
+    try {
+      return masterForUser(userId);
+    } catch {
+      return null;
+    }
+  }
+
+  async getTenantForUser(userId: string): Promise<TenantContextData> {
+    return tenantForUser(userId);
+  }
+
+  async getPublicBootstrap(companySlug: string): Promise<PublicBootstrap> {
+    return getPublicBootstrap(companySlug);
+  }
+
+  async getProductBySlug(companySlug: string, productSlug: string): Promise<Product & { variants: ProductVariant[] }> {
+    return getProductBySlug(companySlug, productSlug);
+  }
+
+  async createPublicOrder(input: {
+    companySlug: string;
+    customer: {
+      fullName: string;
+      phone?: string;
+      fulfillmentType: 'delivery' | 'pickup';
+      paymentMethod: 'cash' | 'pix' | 'card' | 'online';
+    };
+    items: Array<{ productId: string; variantId?: string | null; quantity: number }>;
+  }): Promise<Order> {
+    return createPublicOrder(input);
+  }
+
+  async getClientDashboard(companyId: string): Promise<{
+    productsTotal: number;
+    productsLive: number;
+    ordersTotal: number;
+    revenueTotal: number;
+  }> {
+    const products = db.products.filter((item) => item.companyId === companyId);
+    const orders = db.orders.filter((item) => item.companyId === companyId);
+    return {
+      productsTotal: products.length,
+      productsLive: products.filter((item) => item.isActive && item.catalogStatus === 'live').length,
+      ordersTotal: orders.length,
+      revenueTotal: Number(orders.reduce((sum, item) => sum + item.totalAmount, 0).toFixed(2))
+    };
+  }
+
+  async listClientProducts(companyId: string): Promise<Product[]> {
+    return db.products.filter((item) => item.companyId === companyId);
+  }
+
+  async bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]> {
+    return db.products
+      .filter((item) => item.companyId === companyId && productIds.includes(item.id))
+      .map((item) => {
+        item.stockQuantity = stockQuantity;
+        return item;
+      });
+  }
+
+  async listClientCategories(companyId: string): Promise<Category[]> {
+    return db.categories.filter((item) => item.companyId === companyId);
+  }
+
+  async listClientOrders(companyId: string): Promise<Order[]> {
+    return db.orders.filter((item) => item.companyId === companyId);
+  }
+
+  async getMasterDashboard(): Promise<{
+    companiesTotal: number;
+    activeCompanies: number;
+    ordersTotal: number;
+    revenueTotal: number;
+  }> {
+    return {
+      companiesTotal: db.companies.length,
+      activeCompanies: db.companies.filter((item) => item.status === 'active').length,
+      ordersTotal: db.orders.length,
+      revenueTotal: Number(db.orders.reduce((sum, item) => sum + item.totalAmount, 0).toFixed(2))
+    };
+  }
+
+  async listMasterCompanies(): Promise<Array<Company & { productsTotal: number; ordersTotal: number }>> {
+    return db.companies.map((company) => ({
+      ...company,
+      productsTotal: db.products.filter((product) => product.companyId === company.id).length,
+      ordersTotal: db.orders.filter((order) => order.companyId === company.id).length
+    }));
+  }
 }

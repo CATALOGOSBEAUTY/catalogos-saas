@@ -1,6 +1,12 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../app.js';
+import { setRepositoryForTests } from '../repositories/index.js';
+import { MemoryCatalogRepository } from '../store/data.js';
+
+beforeAll(() => {
+  setRepositoryForTests(new MemoryCatalogRepository());
+});
 
 describe('multi-tenant foundation', () => {
   it('does not leak products from another tenant in public bootstrap', async () => {

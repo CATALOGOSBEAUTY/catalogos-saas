@@ -2,7 +2,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env.js';
 import { verifySession } from '../lib/auth.js';
 import { ApiError } from '../lib/http.js';
-import { masterForUser, tenantForUser, type ClientRole, type MasterRole } from '../store/data.js';
+import { getRepository } from '../repositories/index.js';
+import { type ClientRole, type MasterRole } from '../store/data.js';
 
 export interface RequestUser {
   id: string;
@@ -55,8 +56,13 @@ export function requireTenant(req: Request, _res: Response, next: NextFunction):
     next(new ApiError(401, 'AUTH_REQUIRED', 'Authentication required'));
     return;
   }
-  req.tenant = tenantForUser(req.user.id);
-  next();
+  getRepository()
+    .getTenantForUser(req.user.id)
+    .then((tenant) => {
+      req.tenant = tenant;
+      next();
+    })
+    .catch(next);
 }
 
 export function requireRole(roles: ClientRole[]) {
@@ -74,10 +80,15 @@ export function requireMaster(req: Request, _res: Response, next: NextFunction):
     next(new ApiError(401, 'AUTH_REQUIRED', 'Authentication required'));
     return;
   }
-  const master = masterForUser(req.user.id);
-  req.master = {
-    userId: req.user.id,
-    role: master.role
-  };
-  next();
+  getRepository()
+    .getMasterForUser(req.user.id)
+    .then((master) => {
+      if (!master) throw new ApiError(403, 'FORBIDDEN', 'Master access required');
+      req.master = {
+        userId: req.user!.id,
+        role: master.role
+      };
+      next();
+    })
+    .catch(next);
 }
