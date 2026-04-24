@@ -97,6 +97,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (payload as ApiEnvelope<T>).data;
 }
 
+async function upload<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${env.apiUrl}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'X-Client-Request': 'true'
+    },
+    body: formData
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message ?? 'Erro inesperado';
+    throw new Error(message);
+  }
+  return (payload as ApiEnvelope<T>).data;
+}
+
 export const api = {
   getPublicBootstrap(companySlug: string) {
     return request<PublicBootstrap>(`/api/public/${companySlug}/bootstrap`);
@@ -153,6 +170,11 @@ export const api = {
       headers: { 'X-Client-Request': 'true' },
       body: JSON.stringify(body)
     });
+  },
+  uploadClientProductImage(productId: string, file: File) {
+    const formData = new FormData();
+    formData.append('image', file);
+    return upload<PublicProduct>(`/api/client/products/${productId}/image`, formData);
   },
   updateClientProductStatus(productId: string, body: { isActive?: boolean; catalogStatus?: 'draft' | 'ready' | 'live' }) {
     return request<PublicProduct>(`/api/client/products/${productId}/status`, {

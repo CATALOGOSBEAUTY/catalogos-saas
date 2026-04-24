@@ -45,6 +45,7 @@ export const env = {
   dataProvider: process.env.DATA_PROVIDER === 'supabase' ? 'supabase' : 'memory',
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  supabaseMediaBucket: process.env.SUPABASE_MEDIA_BUCKET ?? 'catalogos-public',
   sessionCookieName: 'catalogos_session',
   isProduction: process.env.NODE_ENV === 'production'
 };

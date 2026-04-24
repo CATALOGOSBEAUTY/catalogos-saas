@@ -499,6 +499,19 @@ export class SupabaseCatalogRepository implements CatalogRepository {
     return mapProduct(data, input.imageUrl ?? (await this.getPrimaryImageUrl(companyId, productId)));
   }
 
+  async setClientProductImage(companyId: string, productId: string, imageUrl: string): Promise<Product> {
+    const { data, error } = await this.client
+      .from('products')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('id', productId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    await this.upsertPrimaryImage(companyId, productId, imageUrl);
+    return mapProduct(data, imageUrl);
+  }
+
   async updateClientProductStatus(companyId: string, productId: string, input: { isActive?: boolean; catalogStatus?: Product['catalogStatus'] }): Promise<Product> {
     const patch: Row = {};
     if (input.isActive !== undefined) patch.is_active = input.isActive;

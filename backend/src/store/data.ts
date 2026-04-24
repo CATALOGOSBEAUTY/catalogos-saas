@@ -189,6 +189,7 @@ export interface CatalogRepository {
   listClientProducts(companyId: string): Promise<Product[]>;
   createClientProduct(companyId: string, input: ProductWriteInput): Promise<Product>;
   updateClientProduct(companyId: string, productId: string, input: Partial<ProductWriteInput>): Promise<Product>;
+  setClientProductImage(companyId: string, productId: string, imageUrl: string): Promise<Product>;
   updateClientProductStatus(companyId: string, productId: string, input: { isActive?: boolean; catalogStatus?: Product['catalogStatus'] }): Promise<Product>;
   deleteClientProduct(companyId: string, productId: string): Promise<void>;
   bulkUpdateProductStock(companyId: string, productIds: string[], stockQuantity: number): Promise<Product[]>;
@@ -737,6 +738,13 @@ export class MemoryCatalogRepository implements CatalogRepository {
       isFeatured: input.isFeatured ?? product.isFeatured,
       imageUrl: input.imageUrl ?? product.imageUrl
     });
+    return product;
+  }
+
+  async setClientProductImage(companyId: string, productId: string, imageUrl: string): Promise<Product> {
+    const product = db.products.find((item) => item.companyId === companyId && item.id === productId);
+    if (!product) throw new ApiError(404, 'NOT_FOUND', 'Product not found');
+    product.imageUrl = imageUrl;
     return product;
   }
 

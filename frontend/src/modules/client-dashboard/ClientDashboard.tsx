@@ -28,7 +28,8 @@ export function ClientDashboard() {
     categoryId: '',
     price: '',
     stockQuantity: '',
-    description: ''
+    description: '',
+    imageFile: null as File | null
   });
 
   async function loadDashboard() {
@@ -69,7 +70,7 @@ export function ClientDashboard() {
     event.preventDefault();
     setStatus(null);
     try {
-      await api.createClientProduct({
+      const product = await api.createClientProduct({
         title: productDraft.title,
         categoryId: productDraft.categoryId,
         description: productDraft.description,
@@ -77,15 +78,19 @@ export function ClientDashboard() {
         stockQuantity: Number(productDraft.stockQuantity),
         catalogStatus: 'draft'
       });
+      if (productDraft.imageFile) {
+        await api.uploadClientProductImage(product.id, productDraft.imageFile);
+      }
       setProductDraft({
         title: '',
         categoryId: categories[0]?.id || '',
         price: '',
         stockQuantity: '',
-        description: ''
+        description: '',
+        imageFile: null
       });
       await loadDashboard();
-      setStatus('Produto criado como rascunho.');
+      setStatus(productDraft.imageFile ? 'Produto criado com imagem.' : 'Produto criado como rascunho.');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Falha ao criar produto.');
     }
@@ -210,6 +215,11 @@ export function ClientDashboard() {
             value={productDraft.description}
             onChange={(event) => setProductDraft((current) => ({ ...current, description: event.target.value }))}
             placeholder="Descricao"
+          />
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => setProductDraft((current) => ({ ...current, imageFile: event.target.files?.[0] ?? null }))}
           />
           <button type="submit">Criar rascunho</button>
         </form>

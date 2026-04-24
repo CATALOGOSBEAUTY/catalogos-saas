@@ -1,12 +1,35 @@
-import { Router } from 'express';
+import { type NextFunction, type Request, type Response, Router } from 'express';
+import multer, { MulterError } from 'multer';
 import { ApiError, asyncHandler, created, noContent, ok, requireString } from '../../lib/http.js';
 import { requireAuth, requireRole, requireTenant } from '../../middleware/auth.js';
 import { getRepository } from '../../repositories/index.js';
+import { uploadProductImage } from '../../services/productMedia.js';
 import type { Product } from '../../store/data.js';
 
 export const clientRouter = Router();
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1
+  }
+});
 
 clientRouter.use(requireAuth, requireTenant);
+
+function handleProductImageUpload(req: Request, res: Response, next: NextFunction): void {
+  imageUpload.single('image')(req, res, (error: unknown) => {
+    if (error instanceof MulterError) {
+      next(new ApiError(error.code === 'LIMIT_FILE_SIZE' ? 413 : 422, 'UPLOAD_ERROR', error.message));
+      return;
+    }
+    if (error) {
+      next(error);
+      return;
+    }
+    next();
+  });
+}
 
 clientRouter.get(
   '/dashboard',
@@ -108,6 +131,16 @@ clientRouter.put(
       imageUrl: typeof req.body?.imageUrl === 'string' ? req.body.imageUrl : undefined
     };
     ok(res, await getRepository().updateClientProduct(req.tenant!.id, req.params.id, patch));
+  })
+);
+
+clientRouter.post(
+  '/products/:id/image',
+  requireRole(['owner', 'manager', 'editor']),
+  handleProductImageUpload,
+  asyncHandler(async (req, res) => {
+    const imageUrl = await uploadProductImage(req.tenant!.id, req.params.id, req.file);
+    ok(res, await getRepository().setClientProductImage(req.tenant!.id, req.params.id, imageUrl));
   })
 );
 
